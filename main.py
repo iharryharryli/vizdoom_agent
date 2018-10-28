@@ -91,6 +91,7 @@ def main():
 
     start = time.time()
     for j in range(num_updates):
+        print(j)
         for step in range(args.num_steps):
             # Sample actions
             with torch.no_grad():
@@ -103,6 +104,7 @@ def main():
             obs, reward, done, infos = envs.step(action)
 
             for info in infos:
+                print (info)
                 if 'episode' in info.keys():
                     episode_rewards.append(info['episode']['r'])
 
@@ -140,6 +142,8 @@ def main():
             torch.save(save_model, os.path.join(save_path, args.env_name + ".pt"))
 
         total_num_steps = (j + 1) * args.num_processes * args.num_steps
+
+        print("episode r len: {}".format(len(episode_rewards)))
 
         if j % args.log_interval == 0 and len(episode_rewards) > 1:
             end = time.time()
@@ -192,13 +196,7 @@ def main():
                 format(len(eval_episode_rewards),
                        np.mean(eval_episode_rewards)))
 
-        if args.vis and j % args.vis_interval == 0:
-            try:
-                # Sometimes monitor doesn't properly flush the outputs
-                win = visdom_plot(viz, win, args.log_dir, args.env_name,
-                                  args.algo, args.num_frames)
-            except IOError:
-                pass
+       
 
 
 if __name__ == "__main__":

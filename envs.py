@@ -5,12 +5,11 @@ import numpy as np
 import torch
 from gym.spaces.box import Box
 
-from baselines import bench
-from baselines.common.atari_wrappers import make_atari, wrap_deepmind
-from baselines.common.vec_env import VecEnvWrapper
-from baselines.common.vec_env.subproc_vec_env import SubprocVecEnv
-from baselines.common.vec_env.dummy_vec_env import DummyVecEnv
-from baselines.common.vec_env.vec_normalize import VecNormalize as VecNormalize_
+from openai import VecEnvWrapper, SubprocVecEnv, VecNormalize as VecNormalize_
+
+from vizdoom_env import ViZDoomENV
+
+from atari_wrappers import make_atari, wrap_deepmind
 
 
 try:
@@ -49,8 +48,9 @@ def make_env(env_id, seed, rank, log_dir, add_timestep, allow_early_resets):
             env = AddTimestep(env)
 
         if log_dir is not None:
-            env = bench.Monitor(env, os.path.join(log_dir, str(rank)),
-                                allow_early_resets=allow_early_resets)
+            # env = bench.Monitor(env, os.path.join(log_dir, str(rank)),
+            #                     allow_early_resets=allow_early_resets)
+            pass
 
         if is_atari:
             env = wrap_deepmind(env)
@@ -63,6 +63,31 @@ def make_env(env_id, seed, rank, log_dir, add_timestep, allow_early_resets):
         return env
 
     return _thunk
+
+def make_env_ViZDoom(seed, rank):
+    def _thunk():
+        
+        env = ViZDoomENV(seed + rank)
+
+        obs_shape = env.observation_space.shape
+
+        return env
+
+    return _thunk
+
+def make_vec_envs_ViZDoom(seed, num_processes, device):
+    envs = [make_env_ViZDoom(seed, i)
+            for i in range(num_processes)]
+
+    if len(envs) > 1:
+        envs = SubprocVecEnv(envs)
+    else:
+        envs = DummyVecEnv(envs)
+
+    envs = VecPyTorch(envs, device)
+
+    return envs
+
 
 def make_vec_envs(env_name, seed, num_processes, gamma, log_dir, add_timestep,
                   device, allow_early_resets, num_frame_stack=None):
