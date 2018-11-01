@@ -13,7 +13,7 @@ class Discrete:
         self.shape = [self.n]
 
 class ViZDoomENV:
-    def __init__(self, seed):
+    def __init__(self, seed, render=False):
         # assign observation and action space
         self.observation_space = ViZDoom_observation_space()
         self.action_space = Discrete()
@@ -64,7 +64,7 @@ class ViZDoomENV:
         
         
         game.set_seed(seed)
-        game.set_window_visible(False)
+        game.set_window_visible(render)
         game.init()
         
         self.game = game
