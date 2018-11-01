@@ -6,7 +6,7 @@ import numpy as np
 # define observation and action space
 class ViZDoom_observation_space:
     def __init__(self):
-        self.shape = (4, 84, 84)
+        self.shape = (1, 84, 84)
 class Discrete:
     def __init__(self):
         self.n = 3 # number of actions
@@ -19,7 +19,7 @@ class ViZDoomENV:
         self.action_space = Discrete()
         
         game = vzd.DoomGame()
-        game.set_doom_scenario_path("ViZDoom_map/health_gathering.wad")
+        game.set_doom_scenario_path("ViZDoom_map/health_gathering_supreme.wad")
         
         # game input setup
         game.set_screen_resolution(vzd.ScreenResolution.RES_160X120)
@@ -76,19 +76,20 @@ class ViZDoomENV:
         state = self.game.get_state()
         
         n = state.number
-        screen_buf = state.screen_buffer
+        #screen_buf = state.screen_buffer
         depth_buf = state.depth_buffer
         
         # down sample to 84 * 84
         resolution = self.observation_space.shape[1:]
-        screen_buf = skimage.transform.resize(screen_buf, resolution)
+        #screen_buf = skimage.transform.resize(screen_buf, resolution)
         depth_buf = skimage.transform.resize(depth_buf, resolution)
         
         # change axis
-        screen_buf = np.rollaxis(screen_buf, 2, 0)
+        #screen_buf = np.rollaxis(screen_buf, 2, 0)
         depth_buf = depth_buf[np.newaxis,:]
         
-        res = np.vstack((screen_buf, depth_buf))
+        #res = np.vstack((screen_buf, depth_buf))
+        res = depth_buf
         
         self.last_input = (res, n)
         
