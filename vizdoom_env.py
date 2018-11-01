@@ -5,18 +5,25 @@ import numpy as np
 
 # define observation and action space
 class ViZDoom_observation_space:
-    def __init__(self):
-        self.shape = (1, 84, 84)
+    def __init__(self, shape):
+        self.shape = shape
 class Discrete:
-    def __init__(self):
-        self.n = 3 # number of actions
+    def __init__(self, n):
+        self.n = n # number of actions
         self.shape = [self.n]
 
 class ViZDoomENV:
-    def __init__(self, seed, render=False):
-        # assign observation and action space
-        self.observation_space = ViZDoom_observation_space()
-        self.action_space = Discrete()
+    def __init__(self, seed, render=False, use_depth=True, use_rgb=True, reward_scale=1):
+        # assign observation space
+        self.use_rgb = use_rgb
+        self.use_depth = use_depth
+        channel_num = 0
+        if use_depth:
+            channel_num = channel_num + 1
+        if use_rgb:
+            channel_num = channel_num + 3
+        self.observation_space = ViZDoom_observation_space((channel_num, 84, 84))
+        
         
         game = vzd.DoomGame()
         game.set_doom_scenario_path("ViZDoom_map/health_gathering_supreme.wad")
@@ -24,7 +31,8 @@ class ViZDoomENV:
         # game input setup
         game.set_screen_resolution(vzd.ScreenResolution.RES_160X120)
         game.set_screen_format(vzd.ScreenFormat.RGB24)
-        game.set_depth_buffer_enabled(True)
+        if use_depth:
+            game.set_depth_buffer_enabled(True)
         
         # rendering setup
         game.set_render_hud(False)
@@ -39,6 +47,7 @@ class ViZDoomENV:
         #game.set_render_screen_flashes(True)  # Effect upon taking damage or picking up items
         
         # Adds buttons that will be allowed.
+        self.action_space = Discrete(3)
         game.add_available_button(vzd.Button.TURN_LEFT)
         game.add_available_button(vzd.Button.TURN_RIGHT)
         game.add_available_button(vzd.Button.MOVE_FORWARD)
@@ -54,7 +63,6 @@ class ViZDoomENV:
         # Causes episodes to finish after 2100 tics (actions)
         game.set_episode_timeout(2100)
         # Sets the livin reward (for each move) to 1
-        reward_scale = 1e-3
         game.set_living_reward(1 * reward_scale)
         game.set_death_penalty(1000 * reward_scale)
         # Sets ViZDoom mode (PLAYER, ASYNC_PLAYER, SPECTATOR, ASYNC_SPECTATOR, PLAYER mode is default)
@@ -74,22 +82,24 @@ class ViZDoomENV:
         
     def get_current_input(self):
         state = self.game.get_state()
+
+        resolution = self.observation_space.shape[1:]
         
         n = state.number
-        #screen_buf = state.screen_buffer
-        depth_buf = state.depth_buffer
         
-        # down sample to 84 * 84
-        resolution = self.observation_space.shape[1:]
-        #screen_buf = skimage.transform.resize(screen_buf, resolution)
-        depth_buf = skimage.transform.resize(depth_buf, resolution)
-        
-        # change axis
-        #screen_buf = np.rollaxis(screen_buf, 2, 0)
-        depth_buf = depth_buf[np.newaxis,:]
-        
-        #res = np.vstack((screen_buf, depth_buf))
-        res = depth_buf
+        if self.use_rgb:
+            screen_buf = state.screen_buffer
+            screen_buf = skimage.transform.resize(screen_buf, resolution)
+            screen_buf = np.rollaxis(screen_buf, 2, 0)
+            res = screen_buf
+        if self.use_depth:
+            depth_buf = state.depth_buffer
+            depth_buf = skimage.transform.resize(depth_buf, resolution)
+            depth_buf = depth_buf[np.newaxis,:]
+            res = depth_buf
+
+        if self.use_depth and self.use_rgb:
+            res = np.vstack((screen_buf, depth_buf))
         
         self.last_input = (res, n)
         

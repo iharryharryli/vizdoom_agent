@@ -64,10 +64,10 @@ def make_env(env_id, seed, rank, log_dir, add_timestep, allow_early_resets):
 
     return _thunk
 
-def make_env_ViZDoom(seed, rank, render=False):
+def make_env_ViZDoom(seed, rank, **kwargs):
     def _thunk():
         
-        env = ViZDoomENV(seed + rank, render)
+        env = ViZDoomENV(seed + rank, **kwargs)
 
         obs_shape = env.observation_space.shape
 
@@ -75,8 +75,8 @@ def make_env_ViZDoom(seed, rank, render=False):
 
     return _thunk
 
-def make_vec_envs_ViZDoom(seed, num_processes, device, render=False):
-    envs = [make_env_ViZDoom(seed, i, render)
+def make_vec_envs_ViZDoom(seed, num_processes, device, **kwargs):
+    envs = [make_env_ViZDoom(seed, i, **kwargs)
             for i in range(num_processes)]
 
     envs = SubprocVecEnv(envs)

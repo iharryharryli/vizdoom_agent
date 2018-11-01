@@ -14,7 +14,8 @@ class A2C_ACKTR():
                  eps=None,
                  alpha=None,
                  max_grad_norm=None,
-                 acktr=False):
+                 acktr=False,
+                 use_adam=False):
 
         self.actor_critic = actor_critic
         self.acktr = acktr
@@ -27,7 +28,10 @@ class A2C_ACKTR():
         if acktr:
             self.optimizer = KFACOptimizer(actor_critic)
         else:
-            self.optimizer = optim.RMSprop(
+            if use_adam:
+                self.optimizer = optim.Adam(actor_critic.parameters(), lr=lr, eps=eps)
+            else:
+                self.optimizer = optim.RMSprop(
                 actor_critic.parameters(), lr, eps=eps, alpha=alpha)
 
     def update(self, rollouts):
