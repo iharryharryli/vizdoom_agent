@@ -13,7 +13,7 @@ class Discrete:
         self.shape = [self.n]
 
 class ViZDoomENV:
-    def __init__(self, seed, render=False, use_depth=True, use_rgb=True, reward_scale=1):
+    def __init__(self, seed, render=False, use_depth=True, use_rgb=True, reward_scale=1, frame_repeat=1):
         # assign observation space
         self.use_rgb = use_rgb
         self.use_depth = use_depth
@@ -58,13 +58,13 @@ class ViZDoomENV:
             actions[i][i] = True
         self.actions = actions
         # set frame repeat for taking action
-        self.frame_repeat = 1
+        self.frame_repeat = frame_repeat
         
         # Causes episodes to finish after 2100 tics (actions)
         game.set_episode_timeout(2100)
         # Sets the livin reward (for each move) to 1
         game.set_living_reward(1 * reward_scale)
-        game.set_death_penalty(1000 * reward_scale)
+        #game.set_death_penalty(1000 * reward_scale)
         # Sets ViZDoom mode (PLAYER, ASYNC_PLAYER, SPECTATOR, ASYNC_SPECTATOR, PLAYER mode is default)
         game.set_mode(vzd.Mode.PLAYER)
 
