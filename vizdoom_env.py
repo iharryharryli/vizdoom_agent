@@ -27,7 +27,6 @@ class ViZDoomENV:
         
         game = vzd.DoomGame()
         game.set_doom_scenario_path("ViZDoom_map/health_gathering_supreme.wad")
-        game.add_available_game_variable(vzd.GameVariable.HEALTH)
         
         # game input setup
         game.set_screen_resolution(vzd.ScreenResolution.RES_160X120)
@@ -113,10 +112,12 @@ class ViZDoomENV:
             
             ob = self.get_current_input(cur_state)
             self.last_input = (ob, cur_state.number)
-            
             current_health = cur_state.game_variables[0]
-            reward = current_health - self.last_health
-            self.last_health = current_health
+            if self.last_health is None:
+                self.last_health = current_health
+            else:
+                reward = current_health - self.last_health
+                self.last_health = current_health
 
         reward = reward * self.reward_scale
         
@@ -124,10 +125,10 @@ class ViZDoomENV:
     
     def reset(self):
         self.last_input = None
+        self.last_health = None
         self.game.new_episode()
         cur_state = self.game.get_state()
         ob = self.get_current_input(cur_state)
-        self.last_health = cur_state.game_variables[0]
         return ob
     
     def close(self):
