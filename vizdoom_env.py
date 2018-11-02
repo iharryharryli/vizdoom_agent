@@ -110,7 +110,6 @@ class ViZDoomENV:
         if done:
             ob, n = self.last_input
             info['Episode_Total_Len'] = n
-            info['Episode_Total_Reward'] = self.total_reward
         else:
             cur_state = self.game.get_state()
             
@@ -118,20 +117,15 @@ class ViZDoomENV:
             self.last_input = (ob, cur_state.number)
             
             current_health = cur_state.game_variables[0]
-            delta_health = current_health - self.last_health
+            reward = current_health - self.last_health
             self.last_health = current_health
 
-            if delta_health >= 1:
-                reward = delta_health
-
         reward = reward * self.reward_scale
-        self.total_reward = self.total_reward + reward
         
         return ob, reward, done, info
     
     def reset(self):
         self.last_input = None
-        self.total_reward = 0
         self.game.new_episode()
         cur_state = self.game.get_state()
         ob = self.get_current_input(cur_state)
