@@ -127,7 +127,8 @@ class ViZDoomENV:
         self.last_input = None
         self.last_health = None
         self.game.new_episode()
-        ob, n = self.get_current_input()
+        cur_state = self.game.get_state()
+        ob = self.get_current_input(cur_state)
         return ob
     
     def close(self):
