@@ -63,7 +63,7 @@ class ViZDoomENV:
         # Causes episodes to finish after 2100 tics (actions)
         game.set_episode_timeout(2100)
         # Sets the livin reward (for each move) to 1
-        game.set_living_reward(1 * reward_scale)
+        #game.set_living_reward(1 * reward_scale)
         #game.set_death_penalty(1000 * reward_scale)
         # Sets ViZDoom mode (PLAYER, ASYNC_PLAYER, SPECTATOR, ASYNC_SPECTATOR, PLAYER mode is default)
         game.set_mode(vzd.Mode.PLAYER)
@@ -77,16 +77,10 @@ class ViZDoomENV:
         
         self.game = game
         
-        self.last_input = None
         
-        
-    def get_current_input(self):
-        state = self.game.get_state()
-
+    def get_current_input(self, state):
         resolution = self.observation_space.shape[1:]
-        
-        n = state.number
-        
+                
         if self.use_rgb:
             screen_buf = state.screen_buffer
             screen_buf = skimage.transform.resize(screen_buf, resolution)
@@ -100,25 +94,38 @@ class ViZDoomENV:
 
         if self.use_depth and self.use_rgb:
             res = np.vstack((screen_buf, depth_buf))
-        
-        self.last_input = (res, n)
-        
-        return res, n
+                
+        return res
     
     def step(self, action):
         info = {}
-        reward = self.game.make_action(self.actions[action], self.frame_repeat)
+        reward = 0
+        
+        self.game.make_action(self.actions[action], self.frame_repeat)
+
         done = self.game.is_episode_finished()
         if done:
             ob, n = self.last_input
-            info['Episode_Total_Reward'] = self.game.get_total_reward()
             info['Episode_Total_Len'] = n
         else:
-            ob, n = self.get_current_input()
+            cur_state = self.game.get_state()
+            
+            ob = self.get_current_input(cur_state)
+            self.last_input = (ob, cur_state.number)
+            current_health = cur_state.game_variables[0]
+            if self.last_health is None:
+                self.last_health = current_health
+            else:
+                reward = current_health - self.last_health
+                self.last_health = current_health
+
+        reward = reward * self.reward_scale
         
         return ob, reward, done, info
     
     def reset(self):
+        self.last_input = None
+        self.last_health = None
         self.game.new_episode()
         ob, n = self.get_current_input()
         return ob
