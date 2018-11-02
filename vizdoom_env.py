@@ -66,6 +66,8 @@ class ViZDoomENV:
         # Sets the livin reward (for each move) to 1
         #game.set_living_reward(1 * reward_scale)
         #game.set_death_penalty(1000 * reward_scale)
+        self.reward_scale = reward_scale
+        
         # Sets ViZDoom mode (PLAYER, ASYNC_PLAYER, SPECTATOR, ASYNC_SPECTATOR, PLAYER mode is default)
         game.set_mode(vzd.Mode.PLAYER)
 
