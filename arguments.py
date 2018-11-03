@@ -38,7 +38,7 @@ def get_args():
     parser.add_argument('--clip-param', type=float, default=0.2,
                         help='ppo clip parameter (default: 0.2)')
     parser.add_argument('--save-interval', type=int, default=10,
-                        help='save interval, one save per n updates (default: 100)')
+                        help='save interval, one save per n updates (default: 10)')
     parser.add_argument('--num-frames', type=int, default=10e6,
                         help='number of frames to train (default: 10e6)')
     parser.add_argument('--result-dir', default='./trained_models/',
@@ -47,7 +47,7 @@ def get_args():
                         help='disables CUDA training')
     parser.add_argument('--recurrent-policy', action='store_true', default=False,
                         help='use a recurrent policy')
-    parser.add_argument('--use-adam', action='store_true', default=True,
+    parser.add_argument('--use-adam', action='store_true', default=False,
                         help='use Adam optimizer for A2C')
     args, unknown = parser.parse_known_args()
 
