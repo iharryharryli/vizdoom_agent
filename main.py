@@ -1,3 +1,9 @@
+#!/usr/bin/env python
+# coding: utf-8
+
+# In[1]:
+
+
 import copy
 import glob
 import os
@@ -13,191 +19,172 @@ import torch.optim as optim
 
 import algo
 from arguments import get_args
-from envs import make_vec_envs
+from envs import make_vec_envs_ViZDoom, make_vec_envs
 from model import Policy
 from storage import RolloutStorage
 from utils import get_vec_normalize
-from visualize import visdom_plot
+
+import os
+import json
+
+
+env_arg = {
+    "reward_scale": 0.01,
+    "use_rgb": True,
+    "use_depth": False,
+}
+
 
 args = get_args()
 
-assert args.algo in ['a2c', 'ppo', 'acktr']
-if args.recurrent_policy:
-    assert args.algo in ['a2c', 'ppo'], \
-        'Recurrent policy is not implemented for ACKTR'
+result_dir = args.result_dir
+os.makedirs(result_dir, exist_ok=True)
+
+reward_history = os.path.join(result_dir, "reward_history")
+loss_history = os.path.join(result_dir, "loss_history")
+parameter_save = os.path.join(result_dir, "parameter.json")
+env_parameter_save = os.path.join(result_dir, "env.json")
+progress_save = os.path.join(result_dir, "progress.json")
+MODEL_SAVE_PATH = os.path.join(result_dir, "model.save")
+fileL = [reward_history, loss_history, parameter_save, env_parameter_save]
+
+#remove old record files
+for f in fileL:
+    try:
+        os.remove(f)
+    except OSError:
+        pass
+
+
+parameters = {}
+parameters['algo'] = args.algo
+parameters['gamma'] = args.gamma
+parameters['num_steps'] = args.num_steps
+parameters['num_processes'] = args.num_processes
+parameters['value_loss_coef'] = args.value_loss_coef
+parameters['eps'] = args.eps
+parameters['entropy_coef'] = args.entropy_coef
+parameters['lr'] = args.lr
+parameters['use_gae'] = args.use_gae
+parameters['max_grad_norm'] = args.max_grad_norm
+parameters['seed'] = args.seed
+
+if parameters['algo'] == "a2c":
+    parameters['alpha'] = args.alpha
+    parameters['use_adam'] = args.use_adam
+elif parameters['algo'] == "ppo":
+    parameters['clip_param'] = args.clip_param
+    parameters['ppo_epoch'] = args.ppo_epoch
+    parameters['num_mini_batch'] = args.num_mini_batch
+
+if parameters['use_gae']:
+    parameters['tau'] = args.tau
+    
+
+
+
+
+json.dump(parameters, open(parameter_save, "w"))
+json.dump(env_arg, open(env_parameter_save, "w"))
+
+
 
 num_updates = int(args.num_frames) // args.num_steps // args.num_processes
-
 torch.manual_seed(args.seed)
 if args.cuda:
     torch.cuda.manual_seed(args.seed)
 
-try:
-    os.makedirs(args.log_dir)
-except OSError:
-    files = glob.glob(os.path.join(args.log_dir, '*.monitor.csv'))
-    for f in files:
-        os.remove(f)
 
-eval_log_dir = args.log_dir + "_eval"
+torch.set_num_threads(1)
+device = torch.device("cuda:0" if args.cuda else "cpu")
 
-try:
-    os.makedirs(eval_log_dir)
-except OSError:
-    files = glob.glob(os.path.join(eval_log_dir, '*.monitor.csv'))
-    for f in files:
-        os.remove(f)
+envs = make_vec_envs_ViZDoom(args.seed, args.num_processes, device, **env_arg)
 
+actor_critic = Policy(envs.observation_space.shape, envs.action_space,
+    base_kwargs={'recurrent': args.recurrent_policy})
+actor_critic.to(device)
 
-def main():
-    torch.set_num_threads(1)
-    device = torch.device("cuda:0" if args.cuda else "cpu")
-
-    if args.vis:
-        from visdom import Visdom
-        viz = Visdom(port=args.port)
-        win = None
-
-    envs = make_vec_envs(args.env_name, args.seed, args.num_processes,
-                        args.gamma, args.log_dir, args.add_timestep, device, False)
-
-    actor_critic = Policy(envs.observation_space.shape, envs.action_space,
-        base_kwargs={'recurrent': args.recurrent_policy})
-    actor_critic.to(device)
-
-    if args.algo == 'a2c':
-        agent = algo.A2C_ACKTR(actor_critic, args.value_loss_coef,
+if args.algo == 'a2c':
+    agent = algo.A2C_ACKTR(actor_critic, args.value_loss_coef,
                                args.entropy_coef, lr=args.lr,
                                eps=args.eps, alpha=args.alpha,
-                               max_grad_norm=args.max_grad_norm)
-    elif args.algo == 'ppo':
-        agent = algo.PPO(actor_critic, args.clip_param, args.ppo_epoch, args.num_mini_batch,
+                               max_grad_norm=args.max_grad_norm,
+                               use_adam=args.use_adam)
+else:
+    agent = algo.PPO(actor_critic, args.clip_param, args.ppo_epoch, args.num_mini_batch,
                          args.value_loss_coef, args.entropy_coef, lr=args.lr,
                                eps=args.eps,
                                max_grad_norm=args.max_grad_norm)
-    elif args.algo == 'acktr':
-        agent = algo.A2C_ACKTR(actor_critic, args.value_loss_coef,
-                               args.entropy_coef, acktr=True)
 
-    rollouts = RolloutStorage(args.num_steps, args.num_processes,
-                        envs.observation_space.shape, envs.action_space,
-                        actor_critic.recurrent_hidden_state_size)
+rollouts = RolloutStorage(args.num_steps, args.num_processes,
+                    envs.observation_space.shape, envs.action_space,
+                    actor_critic.recurrent_hidden_state_size)
 
-    obs = envs.reset()
-    rollouts.obs[0].copy_(obs)
-    rollouts.to(device)
 
-    episode_rewards = deque(maxlen=10)
+obs = envs.reset()
+rollouts.obs[0].copy_(obs)
+rollouts.to(device)
 
-    start = time.time()
-    for j in range(num_updates):
-        print(j)
-        for step in range(args.num_steps):
-            # Sample actions
-            with torch.no_grad():
-                value, action, action_log_prob, recurrent_hidden_states = actor_critic.act(
-                        rollouts.obs[step],
-                        rollouts.recurrent_hidden_states[step],
-                        rollouts.masks[step])
+recent_count = 50
+episode_rewards = deque(maxlen=recent_count)
+episode_lengths = deque(maxlen=recent_count)
 
-            # Obser reward and next obs
-            obs, reward, done, infos = envs.step(action)
+progress = {
+    "last_saved_num_updates": 0
+}
 
-            for info in infos:
-                print (info)
-                if 'episode' in info.keys():
-                    episode_rewards.append(info['episode']['r'])
-
-            # If done then clean the history of observations.
-            masks = torch.FloatTensor([[0.0] if done_ else [1.0]
-                                       for done_ in done])
-            rollouts.insert(obs, recurrent_hidden_states, action, action_log_prob, value, reward, masks)
-
+for j in range(num_updates):
+    for step in range(args.num_steps):
+        # Sample actions
         with torch.no_grad():
-            next_value = actor_critic.get_value(rollouts.obs[-1],
-                                                rollouts.recurrent_hidden_states[-1],
-                                                rollouts.masks[-1]).detach()
+            value, action, action_log_prob, recurrent_hidden_states = actor_critic.act(
+                    rollouts.obs[step],
+                    rollouts.recurrent_hidden_states[step],
+                    rollouts.masks[step])
 
-        rollouts.compute_returns(next_value, args.use_gae, args.gamma, args.tau)
+        # Obser reward and next obs
+        obs, reward, done, infos = envs.step(action)
 
-        value_loss, action_loss, dist_entropy = agent.update(rollouts)
+        for info in infos:
+            if 'Episode_Total_Reward' in info.keys():
+                episode_rewards.append(info['Episode_Total_Reward'])
+            if 'Episode_Total_Len' in info.keys():
+                episode_lengths.append(info['Episode_Total_Len'])
 
-        rollouts.after_update()
+        # If done then clean the history of observations.
+        masks = torch.FloatTensor([[0.0] if done_ else [1.0]
+                                   for done_ in done])
+        rollouts.insert(obs, recurrent_hidden_states, action, action_log_prob, value, reward, masks)
+        
+    
+    
 
-        if j % args.save_interval == 0 and args.save_dir != "":
-            save_path = os.path.join(args.save_dir, args.algo)
-            try:
-                os.makedirs(save_path)
-            except OSError:
-                pass
+    with torch.no_grad():
+        next_value = actor_critic.get_value(rollouts.obs[-1],
+                                            rollouts.recurrent_hidden_states[-1],
+                                            rollouts.masks[-1]).detach()
 
-            # A really ugly way to save a model to CPU
-            save_model = actor_critic
-            if args.cuda:
-                save_model = copy.deepcopy(actor_critic).cpu()
+    rollouts.compute_returns(next_value, args.use_gae, args.gamma, args.tau)
 
-            save_model = [save_model,
-                          getattr(get_vec_normalize(envs), 'ob_rms', None)]
+    value_loss, action_loss, dist_entropy = agent.update(rollouts)
 
-            torch.save(save_model, os.path.join(save_path, args.env_name + ".pt"))
+    rollouts.after_update()
+    
+    total_num_steps = (j + 1) * args.num_processes * args.num_steps
+    
+    with open(loss_history, 'a') as the_file:
+        the_file.write("{} {} {} {} \n".format(total_num_steps, value_loss, action_loss, dist_entropy))
+    
+    if len(episode_rewards) > 0:
+        print("{} updates: avg reward = {}, avg length = {}".format(total_num_steps, np.mean(episode_rewards),
+                                                               np.mean(episode_lengths)))
+        
+        with open(reward_history, 'a') as the_file:
+            the_file.write('{} {} {} \n'.format(total_num_steps, np.mean(episode_rewards),
+                                               np.mean(episode_lengths)))
 
-        total_num_steps = (j + 1) * args.num_processes * args.num_steps
-
-        print("episode r len: {}".format(len(episode_rewards)))
-
-        if j % args.log_interval == 0 and len(episode_rewards) > 1:
-            end = time.time()
-            print("Updates {}, num timesteps {}, FPS {} \n Last {} training episodes: mean/median reward {:.1f}/{:.1f}, min/max reward {:.1f}/{:.1f}\n".
-                format(j, total_num_steps,
-                       int(total_num_steps / (end - start)),
-                       len(episode_rewards),
-                       np.mean(episode_rewards),
-                       np.median(episode_rewards),
-                       np.min(episode_rewards),
-                       np.max(episode_rewards), dist_entropy,
-                       value_loss, action_loss))
-
-        if (args.eval_interval is not None
-                and len(episode_rewards) > 1
-                and j % args.eval_interval == 0):
-            eval_envs = make_vec_envs(
-                args.env_name, args.seed + args.num_processes, args.num_processes,
-                args.gamma, eval_log_dir, args.add_timestep, device, True)
-
-            vec_norm = get_vec_normalize(eval_envs)
-            if vec_norm is not None:
-                vec_norm.eval()
-                vec_norm.ob_rms = get_vec_normalize(envs).ob_rms
-
-            eval_episode_rewards = []
-
-            obs = eval_envs.reset()
-            eval_recurrent_hidden_states = torch.zeros(args.num_processes,
-                            actor_critic.recurrent_hidden_state_size, device=device)
-            eval_masks = torch.zeros(args.num_processes, 1, device=device)
-
-            while len(eval_episode_rewards) < 10:
-                with torch.no_grad():
-                    _, action, _, eval_recurrent_hidden_states = actor_critic.act(
-                        obs, eval_recurrent_hidden_states, eval_masks, deterministic=True)
-
-                # Obser reward and next obs
-                obs, reward, done, infos = eval_envs.step(action)
-
-                eval_masks = torch.FloatTensor([[0.0] if done_ else [1.0]
-                                                for done_ in done])
-                for info in infos:
-                    if 'episode' in info.keys():
-                        eval_episode_rewards.append(info['episode']['r'])
-
-            eval_envs.close()
-
-            print(" Evaluation using {} episodes: mean reward {:.5f}\n".
-                format(len(eval_episode_rewards),
-                       np.mean(eval_episode_rewards)))
-
-       
-
-
-if __name__ == "__main__":
-    main()
+    if j % args.save_interval == 0:
+        torch.save(actor_critic.state_dict(), MODEL_SAVE_PATH)
+        progress['last_saved_num_updates'] = j
+        json.dump(progress, open(progress_save, "w"))
+        
