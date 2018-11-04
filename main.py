@@ -33,7 +33,7 @@ env_arg = {
     "reward_scale": args.reward_scale,
     "use_rgb": True,
     "use_depth": False,
-    "reshape_reward": args.reshape_reward,
+    "reward_reshape": args.reward_reshape,
 }
 
 result_dir = args.result_dir
