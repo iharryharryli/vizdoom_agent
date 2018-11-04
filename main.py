@@ -26,14 +26,15 @@ import os
 import json
 
 
-env_arg = {
-    "reward_scale": 0.01,
-    "use_rgb": True,
-    "use_depth": False,
-}
-
 
 args = get_args()
+
+env_arg = {
+    "reward_scale": args.reward_scale,
+    "use_rgb": True,
+    "use_depth": False,
+    "reshape_reward": args.reshape_reward,
+}
 
 result_dir = args.result_dir
 os.makedirs(result_dir, exist_ok=True)

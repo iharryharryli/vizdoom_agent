@@ -49,6 +49,10 @@ def get_args():
                         help='use a recurrent policy')
     parser.add_argument('--use-adam', action='store_true', default=False,
                         help='use Adam optimizer for A2C')
+    parser.add_argument('--reshape-reward', action='store_true', default=False,
+                        help='reshape reward for healthpack picking')
+    parser.add_argument('--reward-scale', type=float, default=0.01,
+                        help='reward scaling (default: 0.01)')
     args, unknown = parser.parse_known_args()
 
     args.cuda = not args.no_cuda and torch.cuda.is_available()
