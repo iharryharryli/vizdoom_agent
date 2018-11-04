@@ -13,7 +13,7 @@ class Discrete:
         self.shape = [self.n]
 
 class ViZDoomENV:
-    def __init__(self, seed, render=False, use_depth=True, use_rgb=True, reward_scale=1, frame_repeat=1):
+    def __init__(self, seed, render=False, use_depth=True, use_rgb=True, reward_scale=1, frame_repeat=1, reward_reshape=False):
         # assign observation space
         self.use_rgb = use_rgb
         self.use_depth = use_depth
@@ -23,10 +23,14 @@ class ViZDoomENV:
         if use_rgb:
             channel_num = channel_num + 3
         self.observation_space = ViZDoom_observation_space((channel_num, 84, 84))
+
+        self.reward_reshape = reward_reshape
+        self.reward_scale = reward_scale
         
         
         game = vzd.DoomGame()
         game.set_doom_scenario_path("ViZDoom_map/health_gathering_supreme.wad")
+        game.add_available_game_variable(vzd.GameVariable.HEALTH)
         
         # game input setup
         game.set_screen_resolution(vzd.ScreenResolution.RES_160X120)
@@ -63,7 +67,7 @@ class ViZDoomENV:
         # Causes episodes to finish after 2100 tics (actions)
         game.set_episode_timeout(2100)
         # Sets the livin reward (for each move) to 1
-        game.set_living_reward(1 * reward_scale)
+        game.set_living_reward(1)
         #game.set_death_penalty(1000 * reward_scale)
         # Sets ViZDoom mode (PLAYER, ASYNC_PLAYER, SPECTATOR, ASYNC_SPECTATOR, PLAYER mode is default)
         game.set_mode(vzd.Mode.PLAYER)
@@ -76,9 +80,7 @@ class ViZDoomENV:
         game.init()
         
         self.game = game
-        
-        self.last_input = None
-        
+                
         
     def get_current_input(self):
         state = self.game.get_state()
@@ -107,19 +109,33 @@ class ViZDoomENV:
     
     def step(self, action):
         info = {}
+        
         reward = self.game.make_action(self.actions[action], self.frame_repeat)
+        if self.reward_reshape:
+            fixed_shaping_reward = game.get_game_variable(vzd.GameVariable.USER1) 
+            shaping_reward = vzd.doom_fixed_to_double(fixed_shaping_reward) 
+            shaping_reward = shaping_reward - self.last_total_shaping_reward
+            self.last_total_shaping_reward += shaping_reward
+            reward = shaping_reward
+        
         done = self.game.is_episode_finished()
         if done:
             ob, n = self.last_input
-            info['Episode_Total_Reward'] = self.game.get_total_reward()
+            info['Episode_Total_Reward'] = self.total_reward
             info['Episode_Total_Len'] = n
         else:
             ob, n = self.get_current_input()
         
+        reward = reward * self.reward_scale
+        self.total_reward += reward
+
         return ob, reward, done, info
     
     def reset(self):
+        self.last_input = None
         self.game.new_episode()
+        self.last_total_shaping_reward = 0
+        self.total_reward = 0
         ob, n = self.get_current_input()
         return ob
     
