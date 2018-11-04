@@ -112,7 +112,7 @@ class ViZDoomENV:
         
         reward = self.game.make_action(self.actions[action], self.frame_repeat)
         if self.reward_reshape:
-            fixed_shaping_reward = game.get_game_variable(vzd.GameVariable.USER1) 
+            fixed_shaping_reward = self.game.get_game_variable(vzd.GameVariable.USER1) 
             shaping_reward = vzd.doom_fixed_to_double(fixed_shaping_reward) 
             shaping_reward = shaping_reward - self.last_total_shaping_reward
             self.last_total_shaping_reward += shaping_reward
@@ -128,6 +128,7 @@ class ViZDoomENV:
         
         reward = reward * self.reward_scale
         self.total_reward += reward
+
 
         return ob, reward, done, info
     
