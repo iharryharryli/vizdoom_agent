@@ -53,7 +53,7 @@ def get_args():
                         help='reshape reward for healthpack picking')
     parser.add_argument('--reward-scale', type=float, default=0.01,
                         help='reward scaling (default: 0.01)')
-    args, unknown = parser.parse_known_args()
+    args = parser.parse_args()
 
     args.cuda = not args.no_cuda and torch.cuda.is_available()
 
