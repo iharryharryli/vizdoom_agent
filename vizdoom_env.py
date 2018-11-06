@@ -2,18 +2,10 @@ import vizdoom as vzd
 import skimage.transform
 import numpy as np
 
-
-# define observation and action space
-class ViZDoom_observation_space:
-    def __init__(self, shape):
-        self.shape = shape
-class Discrete:
-    def __init__(self, n):
-        self.n = n # number of actions
-        self.shape = [self.n]
+from gym.spaces import Discrete, Box
 
 class ViZDoomENV:
-    def __init__(self, seed, render=False, use_depth=True, use_rgb=True, reward_scale=1, frame_repeat=1, reward_reshape=False):
+    def __init__(self, seed, render=False, use_depth=False, use_rgb=True, reward_scale=1, frame_repeat=1, reward_reshape=False):
         # assign observation space
         self.use_rgb = use_rgb
         self.use_depth = use_depth
@@ -22,15 +14,16 @@ class ViZDoomENV:
             channel_num = channel_num + 1
         if use_rgb:
             channel_num = channel_num + 3
-        self.observation_space = ViZDoom_observation_space((channel_num, 84, 84))
+        
+        self.observation_space = Box(low=0.0, high=1.0, shape=(channel_num, 84, 84))
 
         self.reward_reshape = reward_reshape
         self.reward_scale = reward_scale
         
         
         game = vzd.DoomGame()
-        game.set_doom_scenario_path("ViZDoom_map/health_gathering_supreme.wad")
-        game.add_available_game_variable(vzd.GameVariable.HEALTH)
+
+        game.load_config("ViZDoom_map/my_way_home.cfg")
         
         # game input setup
         game.set_screen_resolution(vzd.ScreenResolution.RES_160X120)
@@ -38,42 +31,16 @@ class ViZDoomENV:
         if use_depth:
             game.set_depth_buffer_enabled(True)
         
-        # rendering setup
-        game.set_render_hud(False)
-        game.set_render_minimal_hud(False)  # If hud is enabled
-        game.set_render_crosshair(False)
-        game.set_render_weapon(False)
-        game.set_render_decals(False)  # Bullet holes and blood on the walls
-        game.set_render_particles(False)
-        game.set_render_effects_sprites(False)  # Smoke and blood
-        game.set_render_messages(False)  # In-game messages
-        game.set_render_corpses(False)
-        #game.set_render_screen_flashes(True)  # Effect upon taking damage or picking up items
         
         # Adds buttons that will be allowed.
-        self.action_space = Discrete(3)
-        game.add_available_button(vzd.Button.TURN_LEFT)
-        game.add_available_button(vzd.Button.TURN_RIGHT)
-        game.add_available_button(vzd.Button.MOVE_FORWARD)
-        # generate the corresponding actions
-        num_buttons = self.action_space.n
+        num_buttons = game.get_available_buttons_size()
+        self.action_space = Discrete(num_buttons)
         actions = [([False] * num_buttons)for i in range(num_buttons)]
         for i in range(num_buttons):
             actions[i][i] = True
         self.actions = actions
         # set frame repeat for taking action
         self.frame_repeat = frame_repeat
-        
-        # Causes episodes to finish after 2100 tics (actions)
-        game.set_episode_timeout(2100)
-        # Sets the livin reward (for each move) to 1
-        game.set_living_reward(1)
-        #game.set_death_penalty(1000 * reward_scale)
-        # Sets ViZDoom mode (PLAYER, ASYNC_PLAYER, SPECTATOR, ASYNC_SPECTATOR, PLAYER mode is default)
-        game.set_mode(vzd.Mode.PLAYER)
-
-        
-        
         
         game.set_seed(seed)
         game.set_window_visible(render)

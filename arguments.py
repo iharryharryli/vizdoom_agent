@@ -47,12 +47,12 @@ def get_args():
                         help='disables CUDA training')
     parser.add_argument('--recurrent-policy', action='store_true', default=False,
                         help='use a recurrent policy')
-    parser.add_argument('--use-adam', action='store_true', default=False,
+    parser.add_argument('--use-adam', action='store_true', default=True,
                         help='use Adam optimizer for A2C')
     parser.add_argument('--reward-reshape', action='store_true', default=False,
                         help='reshape reward for healthpack picking')
-    parser.add_argument('--reward-scale', type=float, default=0.01,
-                        help='reward scaling (default: 0.01)')
+    parser.add_argument('--reward-scale', type=float, default=1.0,
+                        help='reward scaling (default: 1.0)')
     args = parser.parse_args()
 
     args.cuda = not args.no_cuda and torch.cuda.is_available()
