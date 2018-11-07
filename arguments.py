@@ -4,7 +4,7 @@ import torch
 
 
 def get_args():
-    parser = argparse.ArgumentParser(description='RL')
+    parser = argparse.ArgumentParser(description='RL', formatter_class=argparse.ArgumentDefaultsHelpFormatter)
     parser.add_argument('--algo', default='a2c',
                         help='algorithm to use: a2c | ppo | acktr')
     parser.add_argument('--lr', type=float, default=7e-4,
