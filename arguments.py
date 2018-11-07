@@ -53,6 +53,8 @@ def get_args():
                         help='reshape reward for healthpack picking')
     parser.add_argument('--reward-scale', type=float, default=1.0,
                         help='reward scaling (default: 1.0)')
+    parser.add_argument('--frame-skip', type=int, default=1,
+                        help='number of frames to skip for each step')
     args = parser.parse_args()
 
     args.cuda = not args.no_cuda and torch.cuda.is_available()

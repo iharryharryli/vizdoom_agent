@@ -34,6 +34,7 @@ env_arg = {
     "use_rgb": True,
     "use_depth": False,
     "reward_reshape": args.reward_reshape,
+    "frame_repeat": args.frame_skip,
 }
 
 result_dir = args.result_dir
