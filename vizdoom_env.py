@@ -15,7 +15,7 @@ class ViZDoomENV:
         if use_rgb:
             channel_num = channel_num + 3
         
-        self.observation_space = Box(low=0.0, high=1.0, shape=(channel_num, 84, 84))
+        self.observation_space = Box(low=0, high=255, shape=(channel_num, 84, 84))
 
         self.reward_reshape = reward_reshape
         self.reward_scale = reward_scale
@@ -27,7 +27,7 @@ class ViZDoomENV:
         
         # game input setup
         game.set_screen_resolution(vzd.ScreenResolution.RES_160X120)
-        game.set_screen_format(vzd.ScreenFormat.RGB24)
+        game.set_screen_format(vzd.ScreenFormat.CRCGCB)
         if use_depth:
             game.set_depth_buffer_enabled(True)
         
@@ -51,15 +51,12 @@ class ViZDoomENV:
         
     def get_current_input(self):
         state = self.game.get_state()
-
-        resolution = self.observation_space.shape[1:]
         
         n = state.number
         
         if self.use_rgb:
             screen_buf = state.screen_buffer
-            screen_buf = skimage.transform.resize(screen_buf, resolution)
-            screen_buf = np.rollaxis(screen_buf, 2, 0)
+            screen_buf = skimage.transform.resize(screen_buf, self.observation_space.shape, preserve_range=True)
             res = screen_buf
         if self.use_depth:
             depth_buf = state.depth_buffer
