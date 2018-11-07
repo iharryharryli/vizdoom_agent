@@ -4,7 +4,7 @@ import torch
 
 
 def get_args():
-    parser = argparse.ArgumentParser(description='RL')
+    parser = argparse.ArgumentParser(description='RL', formatter_class=argparse.ArgumentDefaultsHelpFormatter)
     parser.add_argument('--algo', default='a2c',
                         help='algorithm to use: a2c | ppo | acktr')
     parser.add_argument('--lr', type=float, default=7e-4,
@@ -47,7 +47,7 @@ def get_args():
                         help='disables CUDA training')
     parser.add_argument('--recurrent-policy', action='store_true', default=False,
                         help='use a recurrent policy')
-    parser.add_argument('--use-adam', action='store_true', default=True,
+    parser.add_argument('--use-adam', action='store_true', default=False,
                         help='use Adam optimizer for A2C')
     parser.add_argument('--reward-reshape', action='store_true', default=False,
                         help='reshape reward for healthpack picking')
