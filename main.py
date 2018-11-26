@@ -110,7 +110,7 @@ if args.algo == 'a2c':
                                args.entropy_coef, lr=args.lr,
                                eps=args.eps, alpha=args.alpha,
                                max_grad_norm=args.max_grad_norm,
-                               use_adam=args.use_adam)
+                               use_adam=parameters['use_adam'])
 else:
     agent = algo.PPO(actor_critic, args.clip_param, args.ppo_epoch, args.num_mini_batch,
                          args.value_loss_coef, args.entropy_coef, lr=args.lr,
