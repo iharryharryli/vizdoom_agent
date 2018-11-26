@@ -144,10 +144,10 @@ class CNNBase(NNBase):
             nn.ReLU(),
             init_(nn.Conv2d(32, 64, 4, stride=2)),
             nn.ReLU(),
-            init_(nn.Conv2d(64, 32, 3, stride=1)),
-            nn.ReLU(),
+            # init_(nn.Conv2d(64, 32, 3, stride=1)),
+            # nn.ReLU(),
             Flatten(),
-            init_(nn.Linear(32 * 7 * 7, hidden_size)),
+            init_(nn.Linear(64 * 9 * 9, hidden_size)),
             nn.ReLU()
         )
 
