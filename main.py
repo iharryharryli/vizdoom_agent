@@ -21,6 +21,7 @@ from envs import make_vec_envs_ViZDoom, make_vec_envs
 from model import Policy
 from storage import RolloutStorage
 from utils import get_vec_normalize
+import saves as save_file_names
 
 import os
 import json
@@ -33,19 +34,19 @@ env_arg = {
     "reward_scale": args.reward_scale,
     "use_rgb": True,
     "use_depth": False,
-    "reward_reshape": args.reward_reshape,
     "frame_repeat": args.frame_skip,
+    "game_config": args.game_config,
 }
 
 result_dir = args.result_dir
 os.makedirs(result_dir, exist_ok=True)
 
-reward_history = os.path.join(result_dir, "reward_history")
-loss_history = os.path.join(result_dir, "loss_history")
-parameter_save = os.path.join(result_dir, "parameter.json")
-env_parameter_save = os.path.join(result_dir, "env.json")
-progress_save = os.path.join(result_dir, "progress.json")
-MODEL_SAVE_PATH = os.path.join(result_dir, "model.save")
+reward_history = os.path.join(result_dir, save_file_names.reward_history_file)
+loss_history = os.path.join(result_dir, save_file_names.loss_history_file)
+parameter_save = os.path.join(result_dir, save_file_names.parameter_save_file)
+env_parameter_save = os.path.join(result_dir, save_file_names.env_parameter_save_file)
+progress_save = os.path.join(result_dir, save_file_names.progress_save_file)
+MODEL_SAVE_PATH = os.path.join(result_dir, save_file_names.MODEL_SAVE_PATH_file)
 fileL = [reward_history, loss_history, parameter_save, env_parameter_save]
 
 #remove old record files
@@ -71,7 +72,7 @@ parameters['seed'] = args.seed
 
 if parameters['algo'] == "a2c":
     parameters['alpha'] = args.alpha
-    parameters['use_adam'] = args.use_adam
+    parameters['use_adam'] = not args.use_rmsprop
 elif parameters['algo'] == "ppo":
     parameters['clip_param'] = args.clip_param
     parameters['ppo_epoch'] = args.ppo_epoch
