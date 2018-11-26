@@ -27,7 +27,7 @@ def get_args():
                         help='max norm of gradients (default: 0.5)')
     parser.add_argument('--seed', type=int, default=1,
                         help='random seed (default: 1)')
-    parser.add_argument('--num-processes', type=int, default=16,
+    parser.add_argument('--num-processes', type=int, default=8,
                         help='how many training CPU processes to use (default: 16)')
     parser.add_argument('--num-steps', type=int, default=5,
                         help='number of forward steps in A2C (default: 5)')
@@ -37,24 +37,23 @@ def get_args():
                         help='number of batches for ppo (default: 32)')
     parser.add_argument('--clip-param', type=float, default=0.2,
                         help='ppo clip parameter (default: 0.2)')
-    parser.add_argument('--save-interval', type=int, default=10,
+    parser.add_argument('--save-interval', type=int, default=100,
                         help='save interval, one save per n updates (default: 10)')
-    parser.add_argument('--num-frames', type=int, default=10e6,
-                        help='number of frames to train (default: 10e6)')
+    parser.add_argument('--num-frames', type=int, default=10e7)
     parser.add_argument('--result-dir', default='./trained_models/',
                         help='directory to save agent logs (default: ./trained_models/)')
     parser.add_argument('--no-cuda', action='store_true', default=False,
                         help='disables CUDA training')
     parser.add_argument('--recurrent-policy', action='store_true', default=False,
                         help='use a recurrent policy')
-    parser.add_argument('--use-adam', action='store_true', default=False,
-                        help='use Adam optimizer for A2C')
-    parser.add_argument('--reward-reshape', action='store_true', default=False,
-                        help='reshape reward for healthpack picking')
+    parser.add_argument('--use-rmsprop', action='store_true', default=False,
+                        help='use RMSprop optimizer for A2C')
     parser.add_argument('--reward-scale', type=float, default=1.0,
                         help='reward scaling (default: 1.0)')
-    parser.add_argument('--frame-skip', type=int, default=1,
+    parser.add_argument('--frame-skip', type=int, default=4,
                         help='number of frames to skip for each step')
+    parser.add_argument('--game-config', default="ViZDoom_map/health_gathering_supreme.cfg")
+
     args = parser.parse_args()
 
     args.cuda = not args.no_cuda and torch.cuda.is_available()

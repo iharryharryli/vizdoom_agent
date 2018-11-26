@@ -5,7 +5,7 @@ import numpy as np
 from gym.spaces import Discrete, Box
 
 class ViZDoomENV:
-    def __init__(self, seed, render=False, use_depth=False, use_rgb=True, reward_scale=1, frame_repeat=1, reward_reshape=False):
+    def __init__(self, seed, game_config, render=False, use_depth=False, use_rgb=True, reward_scale=1, frame_skip=4):
         # assign observation space
         self.use_rgb = use_rgb
         self.use_depth = use_depth
@@ -17,13 +17,12 @@ class ViZDoomENV:
         
         self.observation_space = Box(low=0, high=255, shape=(channel_num, 84, 84))
 
-        self.reward_reshape = reward_reshape
         self.reward_scale = reward_scale
         
         
         game = vzd.DoomGame()
 
-        game.load_config("ViZDoom_map/my_way_home.cfg")
+        game.load_config(game_config)
         
         # game input setup
         game.set_screen_resolution(vzd.ScreenResolution.RES_160X120)
@@ -39,8 +38,8 @@ class ViZDoomENV:
         for i in range(num_buttons):
             actions[i][i] = True
         self.actions = actions
-        # set frame repeat for taking action
-        self.frame_repeat = frame_repeat
+        # set frame skip for taking action
+        self.frame_skip = frame_skip
         
         game.set_seed(seed)
         game.set_window_visible(render)
@@ -51,9 +50,7 @@ class ViZDoomENV:
         
     def get_current_input(self):
         state = self.game.get_state()
-        
-        n = state.number
-        
+                
         if self.use_rgb:
             screen_buf = state.screen_buffer
             screen_buf = skimage.transform.resize(screen_buf, self.observation_space.shape, preserve_range=True)
@@ -67,41 +64,49 @@ class ViZDoomENV:
         if self.use_depth and self.use_rgb:
             res = np.vstack((screen_buf, depth_buf))
         
-        self.last_input = (res, n)
+        self.last_input = res
         
-        return res, n
+        return res
+
+    def step_with_skip(self, action):
+        reward_acc = 0
+        ob = self.last_input
+
+        for i in range(self.frame_skip + 1):
+            reward = self.game.make_action(self.actions[action])
+            reward_acc += reward
+            done = self.game.is_episode_finished()
+
+            if done:
+                break
+            else:
+                ob = self.get_current_input()
+
+        return ob, reward_acc, done
+
     
     def step(self, action):
         info = {}
-        
-        reward = self.game.make_action(self.actions[action], self.frame_repeat)
-        if self.reward_reshape:
-            fixed_shaping_reward = self.game.get_game_variable(vzd.GameVariable.USER1) 
-            shaping_reward = vzd.doom_fixed_to_double(fixed_shaping_reward) 
-            shaping_reward = shaping_reward - self.last_total_shaping_reward
-            self.last_total_shaping_reward += shaping_reward
-            reward = shaping_reward
-        
-        done = self.game.is_episode_finished()
-        if done:
-            ob, n = self.last_input
-            info['Episode_Total_Reward'] = self.total_reward
-            info['Episode_Total_Len'] = n
-        else:
-            ob, n = self.get_current_input()
-        
-        reward = reward * self.reward_scale
-        self.total_reward += reward
 
+        ob, reward, done = self.step_with_skip(action)
+
+        #reward scaling
+        reward = reward * self.reward_scale
+
+        self.total_reward += reward
+        self.total_length += 1
+
+        if done:
+            info['Episode_Total_Reward'] = self.total_reward
+            info['Episode_Total_Len'] = self.total_length
 
         return ob, reward, done, info
     
     def reset(self):
-        self.last_input = None
         self.game.new_episode()
-        self.last_total_shaping_reward = 0
         self.total_reward = 0
-        ob, n = self.get_current_input()
+        self.total_length = 0
+        ob = self.get_current_input()
         return ob
     
     def close(self):
