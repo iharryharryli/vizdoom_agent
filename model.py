@@ -148,8 +148,6 @@ class CNNBase(NNBase):
             # nn.ReLU(),
             Flatten(),
             init_(nn.Linear(64 * 9 * 9, hidden_size)),
-            nn.ReLU(),
-            init_(nn.Linear(hidden_size, hidden_size)),
             nn.ReLU()
         )
 
