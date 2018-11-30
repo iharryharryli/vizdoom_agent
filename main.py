@@ -32,8 +32,8 @@ args = get_args()
 
 env_arg = {
     "reward_scale": args.reward_scale,
-    "use_rgb": True,
-    "use_depth": False,
+    "use_rgb": not args.disable_rgb,
+    "use_depth": args.use_depth,
     "frame_skip": args.frame_skip,
     "game_config": args.game_config,
 }

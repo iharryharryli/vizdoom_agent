@@ -50,19 +50,18 @@ class ViZDoomENV:
         
     def get_current_input(self):
         state = self.game.get_state()
+
+        res_source = []
                 
         if self.use_rgb:
-            screen_buf = state.screen_buffer
-            screen_buf = skimage.transform.resize(screen_buf, self.observation_space.shape, preserve_range=True)
-            res = screen_buf
+            res_source.append(state.screen_buffer)
         if self.use_depth:
-            depth_buf = state.depth_buffer
-            depth_buf = skimage.transform.resize(depth_buf, resolution)
-            depth_buf = depth_buf[np.newaxis,:]
-            res = depth_buf
+            res_source.append(state.depth_buffer[np.newaxis,:])
 
-        if self.use_depth and self.use_rgb:
-            res = np.vstack((screen_buf, depth_buf))
+        res = np.vstack(res_source)
+
+        # resize
+        res = skimage.transform.resize(res, self.observation_space.shape, preserve_range=True)
         
         self.last_input = res
         
