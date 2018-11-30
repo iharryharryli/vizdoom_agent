@@ -7,7 +7,7 @@ def get_args():
     parser = argparse.ArgumentParser(description='RL', formatter_class=argparse.ArgumentDefaultsHelpFormatter)
     parser.add_argument('--algo', default='a2c',
                         help='algorithm to use: a2c | ppo | acktr')
-    parser.add_argument('--lr', type=float, default=7e-4,
+    parser.add_argument('--lr', type=float, default=1e-4,
                         help='learning rate (default: 7e-4)')
     parser.add_argument('--eps', type=float, default=1e-5,
                         help='RMSprop optimizer epsilon (default: 1e-5)')
@@ -37,22 +37,20 @@ def get_args():
                         help='number of batches for ppo (default: 32)')
     parser.add_argument('--clip-param', type=float, default=0.2,
                         help='ppo clip parameter (default: 0.2)')
-    parser.add_argument('--save-interval', type=int, default=100,
-                        help='save interval, one save per n updates (default: 10)')
+    parser.add_argument('--save-interval', type=int, default=100)
     parser.add_argument('--num-frames', type=int, default=10e7)
     parser.add_argument('--result-dir', default='./trained_models/',
                         help='directory to save agent logs (default: ./trained_models/)')
     parser.add_argument('--no-cuda', action='store_true', default=False,
                         help='disables CUDA training')
-    parser.add_argument('--recurrent-policy', action='store_true', default=False,
+    parser.add_argument('--recurrent-policy', action='store_true', default=True,
                         help='use a recurrent policy')
-    parser.add_argument('--use-rmsprop', action='store_true', default=False,
+    parser.add_argument('--use-rmsprop', action='store_true', default=True,
                         help='use RMSprop optimizer for A2C')
-    parser.add_argument('--reward-scale', type=float, default=1.0,
-                        help='reward scaling (default: 1.0)')
+    parser.add_argument('--reward-scale', type=float, default=0.01)
     parser.add_argument('--frame-skip', type=int, default=4,
                         help='number of frames to skip for each step')
-    parser.add_argument('--game-config', default="ViZDoom_map/health_gathering_supreme.cfg")
+    parser.add_argument('--game-config', default="ViZDoom_map/my_health.cfg")
 
     args = parser.parse_args()
 

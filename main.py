@@ -69,6 +69,7 @@ parameters['lr'] = args.lr
 parameters['use_gae'] = args.use_gae
 parameters['max_grad_norm'] = args.max_grad_norm
 parameters['seed'] = args.seed
+parameters['recurrent_policy'] = args.recurrent_policy
 
 if parameters['algo'] == "a2c":
     parameters['alpha'] = args.alpha
@@ -156,7 +157,7 @@ for j in range(num_updates):
         masks = torch.FloatTensor([[0.0] if done_ else [1.0]
                                    for done_ in done])
         rollouts.insert(obs, recurrent_hidden_states, action, action_log_prob, value, reward, masks)
-        
+
     
     
 
