@@ -1,78 +1,165 @@
-import argparse
+#!/usr/bin/env python
+# coding: utf-8
+
+# In[1]:
+
+
 import os
 
 import numpy as np
 import torch
 
-from envs import VecPyTorch, make_vec_envs
-from utils import get_render_func, get_vec_normalize
+from vizdoom_env import ViZDoomENV
+from model import Policy
+
+from time import sleep
+
+import saves as save_file_names
+import argparse
+
+import json
 
 
-parser = argparse.ArgumentParser(description='RL')
-parser.add_argument('--seed', type=int, default=1,
-                    help='random seed (default: 1)')
-parser.add_argument('--log-interval', type=int, default=10,
-                    help='log interval, one log per n updates (default: 10)')
-parser.add_argument('--env-name', default='PongNoFrameskip-v4',
-                    help='environment to train on (default: PongNoFrameskip-v4)')
-parser.add_argument('--load-dir', default='./trained_models/',
-                    help='directory to save agent logs (default: ./trained_models/)')
-parser.add_argument('--add-timestep', action='store_true', default=False,
-                    help='add timestep to observations')
-parser.add_argument('--non-det', action='store_true', default=False,
-                    help='whether to use a non-deterministic policy')
+# In[2]:
+
+
+parser = argparse.ArgumentParser(description='RL', formatter_class=argparse.ArgumentDefaultsHelpFormatter)
+parser.add_argument('result_dir', type=str)
+parser.add_argument('--seed', type=int, default=1)
+parser.add_argument('--fps', type=int, default=60)
+
+
+# In[3]:
+
 args = parser.parse_args()
 
-args.det = not args.non_det
 
-env = make_vec_envs(args.env_name, args.seed + 1000, 1,
-                            None, None, args.add_timestep, device='cpu',
-                            allow_early_resets=False)
+# In[4]:
 
-# Get a render function
-render_func = get_render_func(env)
 
-# We need to use the same statistics for normalization as used in training
-actor_critic, ob_rms = \
-            torch.load(os.path.join(args.load_dir, args.env_name + ".pt"))
+result_dir = args.result_dir
 
-vec_norm = get_vec_normalize(env)
-if vec_norm is not None:
-    vec_norm.eval()
-    vec_norm.ob_rms = ob_rms
 
-recurrent_hidden_states = torch.zeros(1, actor_critic.recurrent_hidden_state_size)
-masks = torch.zeros(1, 1)
+# In[5]:
 
-if render_func is not None:
-    render_func('human')
 
-obs = env.reset()
+model_params = os.path.join(result_dir, save_file_names.parameter_save_file)
+model_params = json.load(open(model_params))
 
-if args.env_name.find('Bullet') > -1:
-    import pybullet as p
+env_params = os.path.join(result_dir, save_file_names.env_parameter_save_file)
+env_params = json.load(open(env_params))
+env_params['render'] = True
+frame_repeat = env_params['frame_skip'] + 1
+env_params['frame_skip'] = 1
 
-    torsoId = -1
-    for i in range(p.getNumBodies()):
-        if (p.getBodyInfo(i)[0].decode() == "torso"):
-            torsoId = i
+MODEL_SAVE_PATH = os.path.join(result_dir, save_file_names.MODEL_SAVE_PATH_file)
+
+
+# In[6]:
+
+
+env_params
+
+
+# In[7]:
+
+
+cuda = False
+device = torch.device("cuda:0" if cuda else "cpu")
+
+
+# In[8]:
+
+
+env = ViZDoomENV(args.seed, **env_params)
+
+
+# In[9]:
+
+
+recurrent_policy = False
+if "recurrent_policy" in model_params:
+    recurrent_policy = model_params["recurrent_policy"]
+
+
+# In[10]:
+
+
+actor_critic = Policy(env.observation_space.shape, env.action_space,
+    base_kwargs={'recurrent': recurrent_policy})
+actor_critic.to(device)
+actor_critic.load_state_dict(torch.load(MODEL_SAVE_PATH, map_location='cpu'))
+
+
+# In[11]:
+
+
+recurrent_hidden_states = None
+if recurrent_policy:
+    recurrent_hidden_states = torch.zeros(1, actor_critic.recurrent_hidden_state_size)
+
+
+# In[ ]:
+
 
 while True:
-    with torch.no_grad():
-        value, action, _, recurrent_hidden_states = actor_critic.act(
-            obs, recurrent_hidden_states, masks, deterministic=args.det)
+    obs = env.reset()
+    done = False
+    masks = torch.zeros(1, 1)
+    
+    cur_action = None
+    cur_action_count = 0
+    
+    while not done:
+        if cur_action is None or cur_action_count == frame_repeat:
+            cur_action_count = 0
+            with torch.no_grad():
+                value, action, action_prob, recurrent_hidden_states = actor_critic.act(
+                    torch.FloatTensor(obs[np.newaxis,:]), recurrent_hidden_states, masks, deterministic=False)
+                cur_action = action
 
-    # Obser reward and next obs
-    obs, reward, done, _ = env.step(action)
+        obs, reward, done, info = env.step(action)
+        cur_action_count += 1
 
-    masks.fill_(0.0 if done else 1.0)
+        masks.fill_(0.0 if done else 1.0)
 
-    if args.env_name.find('Bullet') > -1:
-        if torsoId > -1:
-            distance = 5
-            yaw = 0
-            humanPos, humanOrn = p.getBasePositionAndOrientation(torsoId)
-            p.resetDebugVisualizerCamera(distance, yaw, -20, humanPos)
+        sleep(1.0/args.fps)
 
-    if render_func is not None:
-        render_func('human')
+    print(info)
+
+
+# In[ ]:
+
+
+obs[2]
+
+
+# In[ ]:
+
+
+value
+
+
+# In[ ]:
+
+
+value, actor_features, rnn_hxs = actor_critic.base(obs, None, masks)
+
+
+# In[ ]:
+
+
+dist = actor_critic.dist(actor_features)
+
+
+# In[ ]:
+
+
+dist.sample()
+
+
+# In[ ]:
+
+
+
+
