@@ -4,8 +4,18 @@ import numpy as np
 
 from gym.spaces import Discrete, Box
 
+from torchvision.transforms import ColorJitter, ToPILImage, ToTensor
+
+def corrupt_rgb(ob):
+    res = np.transpose(ob, (1,2,0))
+    res = ToPILImage()(res.astype(np.uint8))
+    res = ColorJitter(brightness=1.0)(res)
+    res = ToTensor()(res).numpy() * 255
+    return res
+
+
 class ViZDoomENV:
-    def __init__(self, seed, game_config, render=False, use_depth=False, use_rgb=True, reward_scale=1, frame_skip=4):
+    def __init__(self, seed, game_config, render=False, use_depth=False, use_rgb=True, reward_scale=1, frame_skip=4, jitter_rgb=False):
         # assign observation space
         self.use_rgb = use_rgb
         self.use_depth = use_depth
@@ -18,6 +28,8 @@ class ViZDoomENV:
         self.observation_space = Box(low=0, high=255, shape=(channel_num, 84, 84))
 
         self.reward_scale = reward_scale
+
+        self.jitter_rgb = jitter_rgb
         
         
         game = vzd.DoomGame()
@@ -62,6 +74,9 @@ class ViZDoomENV:
 
         # resize
         res = skimage.transform.resize(res, self.observation_space.shape, preserve_range=True)
+
+        if self.jitter_rgb:
+            res[:3] = corrupt_rgb(res[:3])
         
         self.last_input = res
         

@@ -36,6 +36,7 @@ env_arg = {
     "use_depth": args.use_depth,
     "frame_skip": args.frame_skip,
     "game_config": args.game_config,
+    "jitter_rgb": args.jitter_rgb
 }
 
 result_dir = args.result_dir

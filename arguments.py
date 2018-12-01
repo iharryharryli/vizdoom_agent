@@ -53,6 +53,7 @@ def get_args():
     parser.add_argument('--game-config', default="ViZDoom_map/my_health.cfg")
     parser.add_argument('--use-depth', action='store_true', default=False)
     parser.add_argument('--disable-rgb', action='store_true', default=False)
+    parser.add_argument('--jitter-rgb', action='store_true', default=False)
 
     args = parser.parse_args()
 
