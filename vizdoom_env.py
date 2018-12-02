@@ -4,13 +4,10 @@ import numpy as np
 
 from gym.spaces import Discrete, Box
 
-from torchvision.transforms import ColorJitter, ToPILImage, ToTensor
+from skimage.util import random_noise
 
 def corrupt_rgb(ob):
-    res = np.transpose(ob, (1,2,0))
-    res = ToPILImage()(res.astype(np.uint8))
-    res = ColorJitter(brightness=1.0)(res)
-    res = ToTensor()(res).numpy() * 255
+    res = random_noise(ob / 255.0, var=0.03) * 255.0
     return res
 
 
