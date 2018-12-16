@@ -7,7 +7,7 @@ from gym.spaces import Discrete, Box
 from skimage.util import random_noise
 
 def corrupt_rgb(ob):
-    res = random_noise(ob / 255.0, var=0.03) * 255.0
+    res = random_noise(ob / 255.0, var=0.2) * 255.0
     return res
 
 
