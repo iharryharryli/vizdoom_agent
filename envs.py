@@ -9,7 +9,6 @@ from openai import VecEnvWrapper, SubprocVecEnv, VecNormalize as VecNormalize_
 
 from vizdoom_env import ViZDoomENV
 
-from atari_wrappers import make_atari, wrap_deepmind
 
 
 try:
