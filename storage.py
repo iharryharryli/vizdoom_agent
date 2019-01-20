@@ -7,10 +7,11 @@ def _flatten_helper(T, N, _tensor):
     return _tensor.view(T * N, *_tensor.size()[2:])
 
 def actions_to_one_hot(actions, num_actions):
-    a = actions.numpy().flatten()
-    b = np.zeros((a.shape[0], num_actions))
-    b[np.arange(a.shape[0]), a] = 1
-    return torch.from_numpy(b)
+    a = actions.reshape(1, -1)
+    a = a.squeeze()
+    b = torch.zeros(a.shape[0], num_actions)
+    b[torch.arange(a.shape[0]), a] = 1
+    return b
 
 class RolloutStorage(object):
     def __init__(self, num_steps, num_processes, obs_shape, action_space, recurrent_hidden_state_size):
