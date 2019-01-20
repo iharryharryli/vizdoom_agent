@@ -16,13 +16,13 @@ class UnFlatten(nn.Module):
 
 
 class Policy(nn.Module):
-    def __init__(self, obs_shape, action_space, base_kwargs=None):
+    def __init__(self, obs_shape, action_space, device, base_kwargs=None):
         super(Policy, self).__init__()
         if base_kwargs is None:
             base_kwargs = {}
 
         if len(obs_shape) == 3:
-            self.base = CNNBase(obs_shape[0], action_space.n, **base_kwargs)
+            self.base = CNNBase(obs_shape[0], action_space.n, device, **base_kwargs)
         elif len(obs_shape) == 1:
             self.base = MLPBase(obs_shape[0], **base_kwargs)
         else:
@@ -141,11 +141,12 @@ class NNBase(nn.Module):
 
 
 class CNNBase(NNBase):
-    def __init__(self, num_inputs, num_actions, recurrent=False, hidden_size=512):
+    def __init__(self, num_inputs, num_actions, device, recurrent=False, hidden_size=512):
         super(CNNBase, self).__init__(recurrent, hidden_size + num_actions, hidden_size * 2)
 
         self.hidden_size = hidden_size
         self.num_actions = num_actions
+        self.device =device
 
         init_ = lambda m: init(m,
             nn.init.orthogonal_,
@@ -196,7 +197,7 @@ class CNNBase(NNBase):
     def reparameterize(self, mu, logvar):
         std = logvar.mul(0.5).exp()
         # return torch.normal(mu, std)
-        esp = torch.randn(*mu.size())
+        esp = torch.randn(*mu.size(), device=self.device)
         z = mu + std * esp
         return z
 

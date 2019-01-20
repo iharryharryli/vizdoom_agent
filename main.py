@@ -104,7 +104,7 @@ device = torch.device("cuda:0" if args.cuda else "cpu")
 
 envs = make_vec_envs_ViZDoom(args.seed, args.num_processes, device, **env_arg)
 
-actor_critic = Policy(envs.observation_space.shape, envs.action_space,
+actor_critic = Policy(envs.observation_space.shape, envs.action_space, device,
     base_kwargs={'recurrent': args.recurrent_policy})
 actor_critic.to(device)
 
