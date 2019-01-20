@@ -10,6 +10,10 @@ class Flatten(nn.Module):
     def forward(self, x):
         return x.view(x.size(0), -1)
 
+class UnFlatten(nn.Module):
+    def forward(self, input):
+        return input.view(input.size(0), 32, 7, 7)
+
 
 class Policy(nn.Module):
     def __init__(self, obs_shape, action_space, base_kwargs=None):
@@ -18,7 +22,7 @@ class Policy(nn.Module):
             base_kwargs = {}
 
         if len(obs_shape) == 3:
-            self.base = CNNBase(obs_shape[0], **base_kwargs)
+            self.base = CNNBase(obs_shape[0], action_space.n, **base_kwargs)
         elif len(obs_shape) == 1:
             self.base = MLPBase(obs_shape[0], **base_kwargs)
         else:
@@ -45,8 +49,8 @@ class Policy(nn.Module):
     def forward(self, inputs, rnn_hxs, masks):
         raise NotImplementedError
 
-    def act(self, inputs, rnn_hxs, masks, deterministic=False):
-        value, actor_features, rnn_hxs = self.base(inputs, rnn_hxs, masks)
+    def act(self, inputs, rnn_hxs, masks, prev_action_one_hot, deterministic=False):
+        value, actor_features, rnn_hxs = self.base(inputs, rnn_hxs, masks, prev_action_one_hot)
         dist = self.dist(actor_features)
 
         if deterministic:
@@ -59,12 +63,12 @@ class Policy(nn.Module):
 
         return value, action, action_log_probs, rnn_hxs
 
-    def get_value(self, inputs, rnn_hxs, masks):
-        value, _, _ = self.base(inputs, rnn_hxs, masks)
+    def get_value(self, inputs, rnn_hxs, masks, prev_action_one_hot):
+        value, _, _ = self.base(inputs, rnn_hxs, masks, prev_action_one_hot)
         return value
 
-    def evaluate_actions(self, inputs, rnn_hxs, masks, action):
-        value, actor_features, rnn_hxs = self.base(inputs, rnn_hxs, masks)
+    def evaluate_actions(self, inputs, rnn_hxs, masks, prev_action_one_hot, action):
+        value, actor_features, rnn_hxs = self.base(inputs, rnn_hxs, masks, prev_action_one_hot)
         dist = self.dist(actor_features)
 
         action_log_probs = dist.log_probs(action)
@@ -102,9 +106,10 @@ class NNBase(nn.Module):
     def output_size(self):
         return self._hidden_size
 
-    def _forward_gru(self, x, hxs, masks):
+    def _forward_gru(self, x, hxs, masks, prev_action_one_hot):
         if x.size(0) == hxs.size(0):
-            x = hxs = self.gru(x, hxs * masks)
+            x2 = torch.cat((x, prev_action_one_hot * masks), dim=1)
+            x = hxs = self.gru(x2, hxs * masks)
         else:
             # x is a (T, N, -1) tensor that has been flatten to (T * N, -1)
             N = hxs.size(0)
@@ -118,7 +123,8 @@ class NNBase(nn.Module):
 
             outputs = []
             for i in range(T):
-                hx = hxs = self.gru(x[i], hxs * masks[i])
+                x2 = torch.cat((x[i], prev_action_one_hot[i] * masks[i]), dim=1)
+                hx = hxs = self.gru(x2, hxs * masks[i])
                 outputs.append(hx)
 
             # assert len(outputs) == T
@@ -131,8 +137,8 @@ class NNBase(nn.Module):
 
 
 class CNNBase(NNBase):
-    def __init__(self, num_inputs, recurrent=False, hidden_size=512):
-        super(CNNBase, self).__init__(recurrent, hidden_size, hidden_size)
+    def __init__(self, num_inputs, num_actions, recurrent=False, hidden_size=512):
+        super(CNNBase, self).__init__(recurrent, hidden_size + num_actions, hidden_size)
 
         init_ = lambda m: init(m,
             nn.init.orthogonal_,
@@ -151,19 +157,38 @@ class CNNBase(NNBase):
             nn.ReLU()
         )
 
-        init_ = lambda m: init(m,
+        init2_ = lambda m: init(m,
             nn.init.orthogonal_,
             lambda x: nn.init.constant_(x, 0))
 
-        self.critic_linear = init_(nn.Linear(hidden_size, 1))
+        self.critic_linear = init2_(nn.Linear(hidden_size, 1))
+
+        # self.decoder = nn.Sequential(
+        #     init2_(nn.Linear(hidden_size, 32 * 7 * 7)),
+        #     UnFlatten(),
+        #     init_(nn.ConvTranspose2d(32, 64, kernel_size=3, stride=1)),
+        #     nn.ReLU(),
+        #     init_(nn.ConvTranspose2d(64, 32, kernel_size=4, stride=2)),
+        #     nn.ReLU(),
+        #     init_(nn.ConvTranspose2d(32, num_inputs, kernel_size=8, stride=4)),
+        #     nn.Sigmoid()
+        # )
 
         self.train()
 
-    def forward(self, inputs, rnn_hxs, masks):
+    def forward(self, inputs, rnn_hxs, masks, prev_action_one_hot):
+        #x, x_var = torch.split(self.main(inputs / 255.0), self.hidden_size, dim=1)
+
+        # o_prime = self.decoder(x)
+        # print(inputs.shape, o_prime.shape)
+
+        # raise ValueError
+
         x = self.main(inputs / 255.0)
+        #x = torch.cat((x, prev_action_one_hot * masks), dim=1)
 
         if self.is_recurrent:
-            x, rnn_hxs = self._forward_gru(x, rnn_hxs, masks)
+            x, rnn_hxs = self._forward_gru(x, rnn_hxs, masks, prev_action_one_hot)
 
         return self.critic_linear(x), x, rnn_hxs
 

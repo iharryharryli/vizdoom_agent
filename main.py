@@ -143,7 +143,8 @@ for j in range(num_updates):
             value, action, action_log_prob, recurrent_hidden_states = actor_critic.act(
                     rollouts.obs[step],
                     rollouts.recurrent_hidden_states[step],
-                    rollouts.masks[step])
+                    rollouts.masks[step],
+                    rollouts.prev_action_one_hot[step])
 
         # Obser reward and next obs
         obs, reward, done, infos = envs.step(action)
@@ -165,7 +166,8 @@ for j in range(num_updates):
     with torch.no_grad():
         next_value = actor_critic.get_value(rollouts.obs[-1],
                                             rollouts.recurrent_hidden_states[-1],
-                                            rollouts.masks[-1]).detach()
+                                            rollouts.masks[-1],
+                                            rollouts.prev_action_one_hot[-1]).detach()
 
     rollouts.compute_returns(next_value, args.use_gae, args.gamma, args.tau)
 

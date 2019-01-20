@@ -1,10 +1,16 @@
 import torch
 from torch.utils.data.sampler import BatchSampler, SubsetRandomSampler
+import numpy as np
 
 
 def _flatten_helper(T, N, _tensor):
     return _tensor.view(T * N, *_tensor.size()[2:])
 
+def actions_to_one_hot(actions, num_actions):
+    a = actions.numpy().flatten()
+    b = np.zeros((a.shape[0], num_actions))
+    b[np.arange(a.shape[0]), a] = 1
+    return torch.from_numpy(b)
 
 class RolloutStorage(object):
     def __init__(self, num_steps, num_processes, obs_shape, action_space, recurrent_hidden_state_size):
@@ -21,6 +27,10 @@ class RolloutStorage(object):
         self.actions = torch.zeros(num_steps, num_processes, action_shape)
         if action_space.__class__.__name__ == 'Discrete':
             self.actions = self.actions.long()
+
+        self.num_actions = action_space.n
+        self.prev_action_one_hot = torch.zeros(num_steps + 1, num_processes, self.num_actions)
+
         self.masks = torch.ones(num_steps + 1, num_processes, 1)
 
         self.num_steps = num_steps
@@ -34,12 +44,14 @@ class RolloutStorage(object):
         self.returns = self.returns.to(device)
         self.action_log_probs = self.action_log_probs.to(device)
         self.actions = self.actions.to(device)
+        self.prev_action_one_hot = self.prev_action_one_hot.to(device)
         self.masks = self.masks.to(device)
 
     def insert(self, obs, recurrent_hidden_states, actions, action_log_probs, value_preds, rewards, masks):
         self.obs[self.step + 1].copy_(obs)
         self.recurrent_hidden_states[self.step + 1].copy_(recurrent_hidden_states)
         self.actions[self.step].copy_(actions)
+        self.prev_action_one_hot[self.step + 1].copy_(actions_to_one_hot(actions, self.num_actions))
         self.action_log_probs[self.step].copy_(action_log_probs)
         self.value_preds[self.step].copy_(value_preds)
         self.rewards[self.step].copy_(rewards)
@@ -51,6 +63,7 @@ class RolloutStorage(object):
         self.obs[0].copy_(self.obs[-1])
         self.recurrent_hidden_states[0].copy_(self.recurrent_hidden_states[-1])
         self.masks[0].copy_(self.masks[-1])
+        self.prev_action_one_hot[0].copy_(self.prev_action_one_hot[-1])
 
     def compute_returns(self, next_value, use_gae, gamma, tau):
         if use_gae:
