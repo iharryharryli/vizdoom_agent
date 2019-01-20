@@ -55,6 +55,8 @@ def get_args():
     parser.add_argument('--disable-rgb', action='store_true', default=False)
     parser.add_argument('--jitter-rgb', action='store_true', default=False)
 
+    parser.add_argument('--new-loss-coef', type=float, default=1.0)
+
     args = parser.parse_args()
 
     args.cuda = not args.no_cuda and torch.cuda.is_available()

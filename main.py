@@ -64,6 +64,7 @@ parameters['gamma'] = args.gamma
 parameters['num_steps'] = args.num_steps
 parameters['num_processes'] = args.num_processes
 parameters['value_loss_coef'] = args.value_loss_coef
+parameters['new_loss_coef'] = args.new_loss_coef
 parameters['eps'] = args.eps
 parameters['entropy_coef'] = args.entropy_coef
 parameters['lr'] = args.lr
@@ -109,7 +110,7 @@ actor_critic.to(device)
 
 if args.algo == 'a2c':
     agent = algo.A2C_ACKTR(actor_critic, args.value_loss_coef,
-                               args.entropy_coef, lr=args.lr,
+                               args.entropy_coef, args.new_loss_coef, lr=args.lr,
                                eps=args.eps, alpha=args.alpha,
                                max_grad_norm=args.max_grad_norm,
                                use_adam=parameters['use_adam'])
@@ -171,14 +172,14 @@ for j in range(num_updates):
 
     rollouts.compute_returns(next_value, args.use_gae, args.gamma, args.tau)
 
-    value_loss, action_loss, dist_entropy = agent.update(rollouts)
+    value_loss, action_loss, dist_entropy, new_loss = agent.update(rollouts)
 
     rollouts.after_update()
     
     total_num_steps = (j + 1) * args.num_processes * args.num_steps
     
     with open(loss_history, 'a') as the_file:
-        the_file.write("{} {} {} {} \n".format(total_num_steps, value_loss, action_loss, dist_entropy))
+        the_file.write("{} {} {} {} {}\n".format(total_num_steps, value_loss, action_loss, dist_entropy, new_loss))
     
     if len(episode_rewards) > 0:
         print("{} updates: avg reward = {}, avg length = {}".format(total_num_steps, np.mean(episode_rewards),
