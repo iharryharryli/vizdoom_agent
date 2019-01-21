@@ -172,14 +172,14 @@ for j in range(num_updates):
 
     rollouts.compute_returns(next_value, args.use_gae, args.gamma, args.tau)
 
-    value_loss, action_loss, dist_entropy, new_loss = agent.update(rollouts)
+    losses = agent.update(rollouts)
 
     rollouts.after_update()
     
     total_num_steps = (j + 1) * args.num_processes * args.num_steps
     
     with open(loss_history, 'a') as the_file:
-        the_file.write("{} {} {} {} {}\n".format(total_num_steps, value_loss, action_loss, dist_entropy, new_loss))
+        the_file.write(("{} " * (len(losses) + 1) + "\n").format(total_num_steps, *losses))
     
     if len(episode_rewards) > 0:
         print("{} updates: avg reward = {}, avg length = {}".format(total_num_steps, np.mean(episode_rewards),
