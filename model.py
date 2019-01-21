@@ -203,6 +203,8 @@ class CNNBase(NNBase):
 
     def forward(self, inputs, rnn_hxs, masks, prev_action_one_hot, is_training=False):
         ob_original = inputs / 255.0
+        rnn_hxs_original = rnn_hxs
+
         x = self.main(ob_original)
         
         x, rnn_hxs = self._forward_gru(x, rnn_hxs, masks, prev_action_one_hot)
@@ -215,7 +217,8 @@ class CNNBase(NNBase):
             ob_reconstructed = self.decoder(z)
 
             # p-network
-            p_input = torch.cat((x, prev_action_one_hot.view(-1, self.num_actions) * masks), dim=1)
+            prev_x = torch.cat((rnn_hxs_original, x), dim=0)[:x.shape[0]]
+            p_input = torch.cat((prev_x, prev_action_one_hot.view(-1, self.num_actions) * masks), dim=1)
             p_output = self.p_network(p_input)
             p_mu, p_logvar = torch.split(p_output, self.hidden_size, dim=1)
             
