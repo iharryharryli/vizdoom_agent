@@ -222,7 +222,7 @@ class CNNBase(NNBase):
             p_output = self.p_network(p_input)
             p_mu, p_logvar = torch.split(p_output, self.hidden_size, dim=1)
             
-            return self.critic_linear(z), z, rnn_hxs, ob_original, ob_reconstructed, mu, logvar, p_mu, p_logvar
+            return self.critic_linear(mu), mu, rnn_hxs, ob_original, ob_reconstructed, mu, logvar, p_mu, p_logvar
         else:
             return self.critic_linear(mu), mu, rnn_hxs
 
