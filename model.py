@@ -142,11 +142,11 @@ class NNBase(nn.Module):
 
 class CNNBase(NNBase):
     def __init__(self, num_inputs, num_actions, device, recurrent=False, hidden_size=512):
-        super(CNNBase, self).__init__(recurrent, hidden_size + num_actions, hidden_size * 2)
+        super(CNNBase, self).__init__(recurrent, hidden_size + num_actions, hidden_size)
 
         self.hidden_size = hidden_size
         self.num_actions = num_actions
-        self.device =device
+        self.device = device
 
         init_ = lambda m: init(m,
             nn.init.orthogonal_,
@@ -186,9 +186,16 @@ class CNNBase(NNBase):
         dist_size = hidden_size * 2
 
         self.p_network = nn.Sequential(
-            init_(nn.Linear(dist_size + num_actions, dist_size)),
+            init_(nn.Linear(hidden_size + num_actions, dist_size)),
             nn.ReLU(),
             init_(nn.Linear(dist_size, dist_size)),
+            nn.ReLU()
+        )
+
+        self.var_network = nn.Sequential(
+            init_(nn.Linear(hidden_size, hidden_size)),
+            nn.ReLU(),
+            init_(nn.Linear(hidden_size, hidden_size)),
             nn.ReLU()
         )
 
@@ -207,9 +214,9 @@ class CNNBase(NNBase):
 
         x = self.main(ob_original)
         
-        x, rnn_hxs = self._forward_gru(x, rnn_hxs, masks, prev_action_one_hot)
+        mu, rnn_hxs = self._forward_gru(x, rnn_hxs, masks, prev_action_one_hot)
 
-        mu, logvar =  torch.split(x, self.hidden_size, dim=1)
+        logvar = self.var_network(mu)
 
         if is_training:
             # reconstruct
@@ -217,7 +224,7 @@ class CNNBase(NNBase):
             ob_reconstructed = self.decoder(z)
 
             # p-network
-            prev_x = torch.cat((rnn_hxs_original, x), dim=0)[:x.shape[0]]
+            prev_x = torch.cat((rnn_hxs_original, mu), dim=0)[:mu.shape[0]]
             p_input = torch.cat((prev_x, prev_action_one_hot.view(-1, self.num_actions) * masks), dim=1)
             p_output = self.p_network(p_input)
             p_mu, p_logvar = torch.split(p_output, self.hidden_size, dim=1)
