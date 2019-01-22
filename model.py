@@ -216,9 +216,9 @@ class CNNBase(NNBase):
         
         mu, rnn_hxs = self._forward_gru(x, rnn_hxs, masks, prev_action_one_hot)
 
-        logvar = self.var_network(mu)
-
         if is_training:
+            logvar = self.var_network(mu)
+
             # reconstruct
             z = self.reparameterize(mu, logvar)
             ob_reconstructed = self.decoder(z)
