@@ -12,7 +12,8 @@ class A2C_ACKTR():
                  actor_critic,
                  value_loss_coef,
                  entropy_coef,
-                 new_loss_coef,
+                 mse_coef,
+                 kl_coef,
                  lr=None,
                  eps=None,
                  alpha=None,
@@ -25,7 +26,8 @@ class A2C_ACKTR():
 
         self.value_loss_coef = value_loss_coef
         self.entropy_coef = entropy_coef
-        self.new_loss_coef = new_loss_coef
+        self.mse_coef = mse_coef
+        self.kl_coef = kl_coef
 
         self.max_grad_norm = max_grad_norm
 
@@ -63,12 +65,12 @@ class A2C_ACKTR():
         reconstuct_mse = F.mse_loss(ob_reconstructed, ob_original)
         kl = p_logvar - logvar + (logvar.exp() + (mu - p_mu).pow(2)) / (p_logvar.exp())
         kl = kl.mean()
-        new_loss = reconstuct_mse + kl
+        new_loss = self.mse_coef * reconstuct_mse + self.kl_coef * kl 
 
 
         self.optimizer.zero_grad()
         (value_loss * self.value_loss_coef + action_loss -
-         dist_entropy * self.entropy_coef + new_loss * self.new_loss_coef).backward()
+         dist_entropy * self.entropy_coef + new_loss).backward()
 
         if self.acktr == False:
             nn.utils.clip_grad_norm_(self.actor_critic.parameters(),

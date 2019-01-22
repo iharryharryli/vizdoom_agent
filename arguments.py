@@ -55,7 +55,8 @@ def get_args():
     parser.add_argument('--disable-rgb', action='store_true', default=False)
     parser.add_argument('--jitter-rgb', action='store_true', default=False)
 
-    parser.add_argument('--new-loss-coef', type=float, default=1.0)
+    parser.add_argument('--mse-coef', type=float, default=1.0)
+    parser.add_argument('--kl-coef', type=float, default=1.0)
 
     args = parser.parse_args()
 
