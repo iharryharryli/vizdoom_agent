@@ -50,12 +50,13 @@ progress_save = os.path.join(result_dir, save_file_names.progress_save_file)
 MODEL_SAVE_PATH = os.path.join(result_dir, save_file_names.MODEL_SAVE_PATH_file)
 fileL = [reward_history, loss_history, parameter_save, env_parameter_save]
 
-#remove old record files
-for f in fileL:
-    try:
-        os.remove(f)
-    except OSError:
-        pass
+if not args.continue_training:
+    #remove old record files
+    for f in fileL:
+        try:
+            os.remove(f)
+        except OSError:
+            pass
 
 
 parameters = {}
@@ -86,32 +87,35 @@ if parameters['use_gae']:
 
 
 
+if args.continue_training:
+    parameters = json.load(open(parameter_save))
+    env_arg = json.load(open(env_parameter_save))
+else:
+    json.dump(parameters, open(parameter_save, "w"))
+    json.dump(env_arg, open(env_parameter_save, "w"))
 
-json.dump(parameters, open(parameter_save, "w"))
-json.dump(env_arg, open(env_parameter_save, "w"))
 
 
-
-num_updates = int(args.num_frames) // args.num_steps // args.num_processes
-torch.manual_seed(args.seed)
+num_updates = int(args.num_frames) // parameters['num_steps'] // parameters['num_processes']
+torch.manual_seed(parameters['seed'])
 if args.cuda:
-    torch.cuda.manual_seed(args.seed)
+    torch.cuda.manual_seed(parameters['seed'])
 
 
 torch.set_num_threads(1)
 device = torch.device("cuda:0" if args.cuda else "cpu")
 
-envs = make_vec_envs_ViZDoom(args.seed, args.num_processes, device, **env_arg)
+envs = make_vec_envs_ViZDoom(parameters['seed'], parameters['num_processes'], device, **env_arg)
 
 actor_critic = Policy(envs.observation_space.shape, envs.action_space,
-    base_kwargs={'recurrent': args.recurrent_policy})
+    base_kwargs={'recurrent': parameters['recurrent_policy']})
 actor_critic.to(device)
 
-if args.algo == 'a2c':
-    agent = algo.A2C_ACKTR(actor_critic, args.value_loss_coef,
-                               args.entropy_coef, lr=args.lr,
-                               eps=args.eps, alpha=args.alpha,
-                               max_grad_norm=args.max_grad_norm,
+if parameters['algo'] == 'a2c':
+    agent = algo.A2C_ACKTR(actor_critic, parameters['value_loss_coef'],
+                               parameters['entropy_coef'], lr=parameters['lr'],
+                               eps=parameters['eps'], alpha=parameters['alpha'],
+                               max_grad_norm=parameters['max_grad_norm'],
                                use_adam=parameters['use_adam'])
 else:
     agent = algo.PPO(actor_critic, args.clip_param, args.ppo_epoch, args.num_mini_batch,
@@ -119,7 +123,7 @@ else:
                                eps=args.eps,
                                max_grad_norm=args.max_grad_norm)
 
-rollouts = RolloutStorage(args.num_steps, args.num_processes,
+rollouts = RolloutStorage(parameters['num_steps'], parameters['num_processes'],
                     envs.observation_space.shape, envs.action_space,
                     actor_critic.recurrent_hidden_state_size)
 
@@ -132,12 +136,20 @@ recent_count = 50
 episode_rewards = deque(maxlen=recent_count)
 episode_lengths = deque(maxlen=recent_count)
 
-progress = {
-    "last_saved_num_updates": 0
-}
+if args.continue_training:
+    progress = json.load(open(progress_save))
+    num_updates_init = progress["last_saved_num_updates"] 
+    actor_critic.load_state_dict(torch.load(MODEL_SAVE_PATH))
+else:
+    num_updates_init = 0
+    progress = {
+        "last_saved_num_updates": 0
+    }
 
-for j in range(num_updates):
-    for step in range(args.num_steps):
+
+
+for j in range(num_updates_init, num_updates):
+    for step in range(parameters['num_steps']):
         # Sample actions
         with torch.no_grad():
             value, action, action_log_prob, recurrent_hidden_states = actor_critic.act(
@@ -167,13 +179,13 @@ for j in range(num_updates):
                                             rollouts.recurrent_hidden_states[-1],
                                             rollouts.masks[-1]).detach()
 
-    rollouts.compute_returns(next_value, args.use_gae, args.gamma, args.tau)
+    rollouts.compute_returns(next_value, parameters['use_gae'], parameters['gamma'], parameters['tau'])
 
     value_loss, action_loss, dist_entropy = agent.update(rollouts)
 
     rollouts.after_update()
     
-    total_num_steps = (j + 1) * args.num_processes * args.num_steps
+    total_num_steps = (j + 1) * parameters['num_processes'] * parameters['num_steps']
     
     with open(loss_history, 'a') as the_file:
         the_file.write("{} {} {} {} \n".format(total_num_steps, value_loss, action_loss, dist_entropy))
