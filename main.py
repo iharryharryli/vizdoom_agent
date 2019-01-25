@@ -179,7 +179,7 @@ for j in range(num_updates_init, num_updates):
                                             rollouts.recurrent_hidden_states[-1],
                                             rollouts.masks[-1]).detach()
 
-    rollouts.compute_returns(next_value, parameters['use_gae'], parameters['gamma'], parameters['tau'])
+    rollouts.compute_returns(next_value, parameters['use_gae'], parameters['gamma'], args.tau)
 
     value_loss, action_loss, dist_entropy = agent.update(rollouts)
 
