@@ -67,6 +67,7 @@ parameters['num_processes'] = args.num_processes
 parameters['value_loss_coef'] = args.value_loss_coef
 parameters['mse_coef'] = args.mse_coef
 parameters['kl_coef'] = args.kl_coef
+parameters['p_weight'] = args.p_weight
 parameters['eps'] = args.eps
 parameters['entropy_coef'] = args.entropy_coef
 parameters['lr'] = args.lr
@@ -109,7 +110,7 @@ device = torch.device("cuda:0" if args.cuda else "cpu")
 
 envs = make_vec_envs_ViZDoom(parameters['seed'], parameters['num_processes'], device, **env_arg)
 
-actor_critic = Policy(envs.observation_space.shape, envs.action_space, device,
+actor_critic = Policy(envs.observation_space.shape, envs.action_space, device, parameters['p_weight'],
     base_kwargs={'recurrent': args.recurrent_policy})
 actor_critic.to(device)
 

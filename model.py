@@ -16,13 +16,13 @@ class UnFlatten(nn.Module):
 
 
 class Policy(nn.Module):
-    def __init__(self, obs_shape, action_space, device, base_kwargs=None):
+    def __init__(self, obs_shape, action_space, device, p_weight, base_kwargs=None):
         super(Policy, self).__init__()
         if base_kwargs is None:
             base_kwargs = {}
 
         if len(obs_shape) == 3:
-            self.base = CNNBase(obs_shape[0], action_space.n, device, **base_kwargs)
+            self.base = CNNBase(obs_shape[0], action_space.n, device, p_weight, **base_kwargs)
         elif len(obs_shape) == 1:
             self.base = MLPBase(obs_shape[0], **base_kwargs)
         else:
@@ -141,12 +141,13 @@ class NNBase(nn.Module):
 
 
 class CNNBase(NNBase):
-    def __init__(self, num_inputs, num_actions, device, recurrent=False, hidden_size=512):
+    def __init__(self, num_inputs, num_actions, device, p_weight, recurrent=False, hidden_size=512):
         super(CNNBase, self).__init__(recurrent, hidden_size + num_actions, hidden_size)
 
         self.hidden_size = hidden_size
         self.num_actions = num_actions
         self.device = device
+        self.p_weight = p_weight
 
         init_ = lambda m: init(m,
             nn.init.orthogonal_,
@@ -216,22 +217,24 @@ class CNNBase(NNBase):
         
         mu, rnn_hxs = self._forward_gru(x, rnn_hxs, masks, prev_action_one_hot)
 
+        # p-network
+        prev_x = torch.cat((rnn_hxs_original, mu), dim=0)[:mu.shape[0]]
+        p_input = torch.cat((prev_x, prev_action_one_hot.view(-1, self.num_actions) * masks), dim=1)
+        p_output = self.p_network(p_input)
+        p_mu, p_logvar = torch.split(p_output, self.hidden_size, dim=1)
+
+        mu_final = self.p_weight * p_mu + (1 - self.p_weight) * mu
+
         if is_training:
             logvar = self.var_network(mu)
 
             # reconstruct
             z = self.reparameterize(mu, logvar)
             ob_reconstructed = self.decoder(z)
-
-            # p-network
-            prev_x = torch.cat((rnn_hxs_original, mu), dim=0)[:mu.shape[0]]
-            p_input = torch.cat((prev_x, prev_action_one_hot.view(-1, self.num_actions) * masks), dim=1)
-            p_output = self.p_network(p_input)
-            p_mu, p_logvar = torch.split(p_output, self.hidden_size, dim=1)
             
-            return self.critic_linear(mu), mu, rnn_hxs, ob_original, ob_reconstructed, mu, logvar, p_mu, p_logvar
+            return self.critic_linear(mu_final), mu_final, rnn_hxs, ob_original, ob_reconstructed, mu, logvar, p_mu, p_logvar
         else:
-            return self.critic_linear(mu), mu, rnn_hxs
+            return self.critic_linear(mu_final), mu_final, rnn_hxs
 
         
 

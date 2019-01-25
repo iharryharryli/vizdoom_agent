@@ -58,6 +58,7 @@ def get_args():
 
     parser.add_argument('--mse-coef', type=float, default=1.0)
     parser.add_argument('--kl-coef', type=float, default=1.0)
+    parser.add_argument('--p-weight', type=float, default=0.5)
 
     args = parser.parse_args()
 
