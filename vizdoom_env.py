@@ -6,13 +6,14 @@ from gym.spaces import Discrete, Box
 
 from skimage.util import random_noise
 
-def corrupt_rgb(ob):
-    res = random_noise(ob / 255.0, var=0.2) * 255.0
+def corrupt_rgb(ob, var):
+    res = random_noise(ob / 255.0, var=var) * 255.0
     return res
 
 
 class ViZDoomENV:
-    def __init__(self, seed, game_config, render=False, use_depth=False, use_rgb=True, reward_scale=1, frame_skip=4, jitter_rgb=False):
+    def __init__(self, seed, game_config, render=False, use_depth=False, use_rgb=True, reward_scale=1, frame_skip=4, jitter_rgb=False,
+    				noise_var=2.0):
         # assign observation space
         self.use_rgb = use_rgb
         self.use_depth = use_depth
@@ -27,6 +28,7 @@ class ViZDoomENV:
         self.reward_scale = reward_scale
 
         self.jitter_rgb = jitter_rgb
+        self.noise_var = noise_var
         
         
         game = vzd.DoomGame()
@@ -73,7 +75,7 @@ class ViZDoomENV:
         res = skimage.transform.resize(res, self.observation_space.shape, preserve_range=True)
 
         if self.jitter_rgb:
-            res[:3] = corrupt_rgb(res[:3])
+            res[:3] = corrupt_rgb(res[:3], self.noise_var)
         
         self.last_input = res
         
