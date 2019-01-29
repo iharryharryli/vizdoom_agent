@@ -13,7 +13,7 @@ def corrupt_rgb(ob, var):
 
 class ViZDoomENV:
     def __init__(self, seed, game_config, render=False, use_depth=False, use_rgb=True, reward_scale=1, frame_skip=4, jitter_rgb=False,
-    				noise_var=2.0):
+    				noise_var=0.2):
         # assign observation space
         self.use_rgb = use_rgb
         self.use_depth = use_depth
