@@ -169,11 +169,6 @@ class CNNBase(NNBase):
             nn.init.orthogonal_,
             lambda x: nn.init.constant_(x, 0))
 
-        init3_ = lambda m: init(m,
-            nn.init.orthogonal_,
-            lambda x: nn.init.constant_(x, 0),
-            nn.init.calculate_gain('tanh'))
-
         self.critic_linear = init2_(nn.Linear(hidden_size, 1))
 
         self.decoder = nn.Sequential(
@@ -191,8 +186,8 @@ class CNNBase(NNBase):
         self.p_network = nn.Sequential(
             init_(nn.Linear(hidden_size + num_actions, hidden_size)),
             nn.ReLU(),
-            init3_(nn.Linear(hidden_size, hidden_size)),
-            nn.Tanh()
+            init_(nn.Linear(hidden_size, hidden_size)),
+            nn.ReLU()
         )
 
 

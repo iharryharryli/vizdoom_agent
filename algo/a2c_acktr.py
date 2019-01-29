@@ -63,7 +63,7 @@ class A2C_ACKTR():
 
         # mse & kl
         reconstuct_mse = F.mse_loss(ob_reconstructed, ob_original)
-        kl = F.mse_loss(mu, p_mu)
+        kl = ((mu - p_mu).pow(2)).mean() 
         new_loss = self.mse_coef * reconstuct_mse + self.kl_coef * kl 
 
 
