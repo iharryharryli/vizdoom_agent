@@ -202,22 +202,6 @@ class CNNBase(NNBase):
             nn.ReLU(),
         )
 
-        
-
-        self.p_network = nn.Sequential(
-            init_(nn.Linear(hidden_size + num_actions, dist_size)),
-            nn.ReLU(),
-            init_(nn.Linear(dist_size, dist_size)),
-            nn.ReLU()
-        )
-
-        self.var_network = nn.Sequential(
-            init_(nn.Linear(hidden_size, hidden_size)),
-            nn.ReLU(),
-            init_(nn.Linear(hidden_size, hidden_size)),
-            nn.ReLU()
-        )
-
         self.train()
 
     def reparameterize(self, mu, logvar):
