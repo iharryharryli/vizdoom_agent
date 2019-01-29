@@ -45,7 +45,7 @@ class A2C_ACKTR():
         action_shape = rollouts.actions.size()[-1]
         num_steps, num_processes, _ = rollouts.rewards.size()
 
-        values, action_log_probs, dist_entropy, _, ob_original, ob_reconstructed, mu, logvar, p_mu, p_logvar =\
+        values, action_log_probs, dist_entropy, _, ob_original, ob_reconstructed, mu, p_mu =\
          self.actor_critic.evaluate_actions(
                 rollouts.obs[:-1].view(-1, *obs_shape),
                 rollouts.recurrent_hidden_states[0].view(-1, self.actor_critic.recurrent_hidden_state_size),
@@ -63,8 +63,7 @@ class A2C_ACKTR():
 
         # mse & kl
         reconstuct_mse = F.mse_loss(ob_reconstructed, ob_original)
-        kl = p_logvar - logvar + (logvar.exp() + (mu - p_mu).pow(2)) / (p_logvar.exp())
-        kl = kl.mean()
+        kl = F.mse_loss(mu, p_mu)
         new_loss = self.mse_coef * reconstuct_mse + self.kl_coef * kl 
 
 

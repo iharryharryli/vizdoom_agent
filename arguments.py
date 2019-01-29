@@ -56,8 +56,8 @@ def get_args():
     parser.add_argument('--jitter-rgb', action='store_true', default=False)
     parser.add_argument('--continue-training', action='store_true', default=False)
 
-    parser.add_argument('--mse-coef', type=float, default=10.0)
-    parser.add_argument('--kl-coef', type=float, default=0.1)
+    parser.add_argument('--mse-coef', type=float, default=1.0)
+    parser.add_argument('--kl-coef', type=float, default=1.0)
     parser.add_argument('--noise-var', type=float, default=2.0)
 
     args = parser.parse_args()

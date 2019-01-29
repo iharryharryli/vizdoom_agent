@@ -68,7 +68,7 @@ class Policy(nn.Module):
         return value
 
     def evaluate_actions(self, inputs, rnn_hxs, masks, prev_action_one_hot, action):
-        value, actor_features, rnn_hxs, ob_original, ob_reconstructed, mu, logvar, p_mu, p_logvar = self.base(inputs, 
+        value, actor_features, rnn_hxs, ob_original, ob_reconstructed, mu, p_mu  = self.base(inputs, 
             rnn_hxs, masks, prev_action_one_hot, is_training=True)
         
         dist = self.dist(actor_features)
@@ -77,7 +77,7 @@ class Policy(nn.Module):
         dist_entropy = dist.entropy().mean()
 
         return value, action_log_probs, dist_entropy, rnn_hxs, ob_original, ob_reconstructed, \
-        mu, logvar, p_mu, p_logvar
+        mu, p_mu
 
 
 class NNBase(nn.Module):
@@ -183,21 +183,13 @@ class CNNBase(NNBase):
             nn.Sigmoid()
         )
 
-        dist_size = hidden_size * 2
-
         self.p_network = nn.Sequential(
-            init_(nn.Linear(hidden_size + num_actions, dist_size)),
+            init_(nn.Linear(hidden_size + num_actions, hidden_size)),
             nn.ReLU(),
-            init_(nn.Linear(dist_size, dist_size)),
+            init_(nn.Linear(hidden_size, hidden_size)),
             nn.ReLU()
         )
 
-        self.var_network = nn.Sequential(
-            init_(nn.Linear(hidden_size, hidden_size)),
-            nn.ReLU(),
-            init_(nn.Linear(hidden_size, hidden_size)),
-            nn.ReLU()
-        )
 
         self.train()
 
@@ -217,19 +209,15 @@ class CNNBase(NNBase):
         mu, rnn_hxs = self._forward_gru(x, rnn_hxs, masks, prev_action_one_hot)
 
         if is_training:
-            logvar = self.var_network(mu)
-
             # reconstruct
-            z = self.reparameterize(mu, logvar)
-            ob_reconstructed = self.decoder(z)
+            ob_reconstructed = self.decoder(mu)
 
             # p-network
             prev_x = torch.cat((rnn_hxs_original, mu), dim=0)[:mu.shape[0]]
             p_input = torch.cat((prev_x, prev_action_one_hot.view(-1, self.num_actions) * masks), dim=1)
-            p_output = self.p_network(p_input)
-            p_mu, p_logvar = torch.split(p_output, self.hidden_size, dim=1)
+            p_mu = self.p_network(p_input)
             
-            return self.critic_linear(mu), mu, rnn_hxs, ob_original, ob_reconstructed, mu, logvar, p_mu, p_logvar
+            return self.critic_linear(mu), mu, rnn_hxs, ob_original, ob_reconstructed, mu, p_mu, 
         else:
             return self.critic_linear(mu), mu, rnn_hxs
 
