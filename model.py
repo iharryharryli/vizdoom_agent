@@ -202,6 +202,11 @@ class CNNBase(NNBase):
             nn.ReLU(),
         )
 
+        self.combine = nn.Sequential(
+            init_(nn.Linear(dist_size, hidden_size)),
+            nn.ReLU(),
+        )
+
         self.train()
 
     def reparameterize(self, mu, logvar):
@@ -223,13 +228,15 @@ class CNNBase(NNBase):
         mu, logvar = torch.split(x, self.hidden_size, dim=1)
         p_mu, p_logvar = torch.split(y, self.hidden_size, dim=1)
 
+        final = self.combine(torch.cat((mu, p_mu), dim=1))
+
         if is_training:
             # reconstruct
             z = self.reparameterize(mu, logvar)
             ob_reconstructed = self.decoder(z)
             
-            return self.critic_linear(mu), mu, rnn_hxs, rnn_hys, ob_original, ob_reconstructed, mu, logvar, p_mu, p_logvar
+            return self.critic_linear(final), final, rnn_hxs, rnn_hys, ob_original, ob_reconstructed, mu, logvar, p_mu, p_logvar
         else:
-            return self.critic_linear(mu), mu, rnn_hxs, rnn_hys
+            return self.critic_linear(final), final, rnn_hxs, rnn_hys
 
         
