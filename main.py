@@ -37,7 +37,8 @@ env_arg = {
     "frame_skip": args.frame_skip,
     "game_config": args.game_config,
     "jitter_rgb": args.jitter_rgb,
-    "noise_var": args.noise_var
+    "noise_var": args.noise_var,
+    "drop_input_prob": args.drop_input_prob,
 }
 
 result_dir = args.result_dir
