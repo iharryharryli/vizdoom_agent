@@ -214,10 +214,10 @@ class CNNBase(NNBase):
             nn.ReLU()
         )
 
-        # self.combine = nn.Sequential(
-        #     init_(nn.Linear(dist_size, hidden_size)),
-        #     nn.ReLU(),
-        # )
+        self.combine = nn.Sequential(
+            init_(nn.Linear(hidden_size * 2, hidden_size)),
+            nn.ReLU(),
+        )
 
         self.train()
 
@@ -240,7 +240,7 @@ class CNNBase(NNBase):
         logvar = self.q_var(mu)
         p_logvar = self.p_var(p_mu)
 
-        final = mu
+        final = self.combine(torch.cat((mu, p_mu), dim=1))
 
         if is_training:
             # reconstruct
