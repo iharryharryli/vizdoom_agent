@@ -1,6 +1,7 @@
 import vizdoom as vzd
 import skimage.transform
 import numpy as np
+import random
 
 from gym.spaces import Discrete, Box
 
@@ -10,10 +11,12 @@ def corrupt_rgb(ob, var):
     res = random_noise(ob / 255.0, var=var) * 255.0
     return res
 
+drop_input_init_safe_len = 10
+drop_input_freq = 10
 
 class ViZDoomENV:
     def __init__(self, seed, game_config, render=False, use_depth=False, use_rgb=True, reward_scale=1, frame_skip=4, jitter_rgb=False,
-    				noise_var=0.2):
+                    noise_var=0.2, drop_input_prob=0.0):
         # assign observation space
         self.use_rgb = use_rgb
         self.use_depth = use_depth
@@ -23,12 +26,15 @@ class ViZDoomENV:
         if use_rgb:
             channel_num = channel_num + 3
         
-        self.observation_space = Box(low=0, high=255, shape=(channel_num, 84, 84))
+        self.observation_shape = (channel_num, 84, 84)
+        self.observation_space = Box(low=0, high=255, shape=self.observation_shape)
 
         self.reward_scale = reward_scale
 
         self.jitter_rgb = jitter_rgb
         self.noise_var = noise_var
+        self.drop_input_prob = drop_input_prob
+        self.prepare_drop_input()
         
         
         game = vzd.DoomGame()
@@ -53,29 +59,36 @@ class ViZDoomENV:
         self.frame_skip = frame_skip
         
         game.set_seed(seed)
+        random.seed(seed)
         game.set_window_visible(render)
         game.init()
         
         self.game = game
-                
+
+    def prepare_drop_input(self):
+        self.is_dropping_input = False
+        self.dropped_input = np.zeros(self.observation_shape)
         
     def get_current_input(self):
-        state = self.game.get_state()
+        if self.is_dropping_input:
+            res = self.dropped_input
+        else:
+            state = self.game.get_state()
 
-        res_source = []
-                
-        if self.use_rgb:
-            res_source.append(state.screen_buffer)
-        if self.use_depth:
-            res_source.append(state.depth_buffer[np.newaxis,:])
+            res_source = []
+                    
+            if self.use_rgb:
+                res_source.append(state.screen_buffer)
+            if self.use_depth:
+                res_source.append(state.depth_buffer[np.newaxis,:])
 
-        res = np.vstack(res_source)
+            res = np.vstack(res_source)
 
-        # resize
-        res = skimage.transform.resize(res, self.observation_space.shape, preserve_range=True)
+            # resize
+            res = skimage.transform.resize(res, self.observation_space.shape, preserve_range=True)
 
-        if self.jitter_rgb:
-            res[:3] = corrupt_rgb(res[:3], self.noise_var)
+            if self.jitter_rgb:
+                res[:3] = corrupt_rgb(res[:3], self.noise_var)
         
         self.last_input = res
         
@@ -100,6 +113,12 @@ class ViZDoomENV:
     
     def step(self, action):
         info = {}
+
+        #decide if drop input
+        if self.drop_input_prob > 0.00001:
+            if self.total_length > drop_input_init_safe_len and \
+            self.total_length % drop_input_freq == 0:
+                self.is_dropping_input = (random.random() < self.drop_input_prob)
 
         ob, reward, done = self.step_with_skip(action)
 

@@ -61,6 +61,8 @@ def get_args():
     parser.add_argument('--noise-var', type=float, default=0.2)
 
 
+    parser.add_argument('--drop-input-prob', type=float, default=0.0)
+
     args = parser.parse_args()
 
     args.cuda = not args.no_cuda and torch.cuda.is_available()
