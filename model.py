@@ -154,7 +154,7 @@ class NNBase(nn.Module):
 
 class CNNBase(NNBase):
     def __init__(self, num_inputs, num_actions, device, recurrent=False, hidden_size=512):
-        super(CNNBase, self).__init__(recurrent, hidden_size, num_actions, hidden_size * 2)
+        super(CNNBase, self).__init__(recurrent, hidden_size, num_actions, hidden_size)
 
         self.hidden_size = hidden_size
         self.num_actions = num_actions
@@ -195,17 +195,29 @@ class CNNBase(NNBase):
             nn.Sigmoid()
         )
 
-        dist_size = hidden_size * 2
-
         self.gru_init = nn.Sequential(
-            init_(nn.Linear(hidden_size, dist_size)),
+            init_(nn.Linear(hidden_size, hidden_size)),
             nn.ReLU(),
         )
 
-        self.combine = nn.Sequential(
-            init_(nn.Linear(dist_size, hidden_size)),
+        self.p_var = nn.Sequential(
+            init_(nn.Linear(hidden_size, hidden_size)),
             nn.ReLU(),
+            init_(nn.Linear(hidden_size, hidden_size)),
+            nn.ReLU()
         )
+
+        self.q_var = nn.Sequential(
+            init_(nn.Linear(hidden_size, hidden_size)),
+            nn.ReLU(),
+            init_(nn.Linear(hidden_size, hidden_size)),
+            nn.ReLU()
+        )
+
+        # self.combine = nn.Sequential(
+        #     init_(nn.Linear(dist_size, hidden_size)),
+        #     nn.ReLU(),
+        # )
 
         self.train()
 
@@ -223,12 +235,12 @@ class CNNBase(NNBase):
 
         gru_init = self.gru_init(x)
         
-        x, rnn_hxs, y, rnn_hys = self._forward_gru(x, rnn_hxs, rnn_hys, gru_init, masks, prev_action_one_hot)
+        mu, rnn_hxs, p_mu, rnn_hys = self._forward_gru(x, rnn_hxs, rnn_hys, gru_init, masks, prev_action_one_hot)
 
-        mu, logvar = torch.split(x, self.hidden_size, dim=1)
-        p_mu, p_logvar = torch.split(y, self.hidden_size, dim=1)
+        logvar = self.q_var(mu)
+        p_logvar = self.p_var(p_mu)
 
-        final = self.combine(torch.cat((mu, p_mu), dim=1))
+        final = mu
 
         if is_training:
             # reconstruct
