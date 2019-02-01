@@ -56,7 +56,7 @@ def get_args():
     parser.add_argument('--jitter-rgb', action='store_true', default=False)
     parser.add_argument('--continue-training', action='store_true', default=False)
 
-    parser.add_argument('--noise-var', type=float, default=0.2)
+    parser.add_argument('--noise-var', type=float, default=0.1)
 
     parser.add_argument('--drop-input-prob', type=float, default=0.0)
 
