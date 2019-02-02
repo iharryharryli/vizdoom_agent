@@ -224,7 +224,7 @@ class CNNBase(NNBase):
             ob_reconstructed = self.decoder(z)
 
             # p-network
-            prev_x = torch.cat((rnn_hxs_original, mu), dim=0)[:mu.shape[0]]
+            prev_x = (torch.cat((rnn_hxs_original, mu), dim=0)[:mu.shape[0]]).detach()
             p_input = torch.cat((prev_x, prev_action_one_hot.view(-1, self.num_actions) * masks), dim=1)
             p_output = self.p_network(p_input)
             p_mu, p_logvar = torch.split(p_output, self.hidden_size, dim=1)
