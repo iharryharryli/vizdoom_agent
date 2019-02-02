@@ -6,6 +6,7 @@ import random
 from gym.spaces import Discrete, Box
 
 from skimage.util import random_noise
+import scipy.ndimage
 
 def corrupt_rgb(ob, var):
     res = random_noise(ob / 255.0, var=var) * 255.0
@@ -16,7 +17,7 @@ drop_input_freq = 10
 
 class ViZDoomENV:
     def __init__(self, seed, game_config, render=False, use_depth=False, use_rgb=True, reward_scale=1, frame_skip=4, jitter_rgb=False,
-                    noise_var=0.2, drop_input_prob=0.0):
+                    noise_var=0.2, drop_input_prob=0.0, rotate_sensor=False, rotate_range=30):
         # assign observation space
         self.use_rgb = use_rgb
         self.use_depth = use_depth
@@ -35,6 +36,8 @@ class ViZDoomENV:
         self.noise_var = noise_var
         self.drop_input_prob = drop_input_prob
         self.prepare_drop_input()
+        self.rotate_sensor = rotate_sensor
+        self.rotate_range = rotate_range
         
         
         game = vzd.DoomGame()
@@ -89,6 +92,11 @@ class ViZDoomENV:
 
             if self.jitter_rgb:
                 res[:3] = corrupt_rgb(res[:3], self.noise_var)
+
+            if self.rotate_sensor:
+                rotate_degree = random.random() * 2 * self.rotate_range - self.rotate_range
+                for i in range(self.observation_shape[0]):
+                    res[i] = scipy.ndimage.rotate(res[i], rotate_degree, reshape=False)
         
         self.last_input = res
         

@@ -60,6 +60,11 @@ def get_args():
 
     parser.add_argument('--drop-input-prob', type=float, default=0.0)
 
+    parser.add_argument('--rotate-sensor', action='store_true', default=False)
+    parser.add_argument('--rotate-range', type=float, default=30.0)
+
+
+
     args = parser.parse_args()
 
     args.cuda = not args.no_cuda and torch.cuda.is_available()
