@@ -199,6 +199,15 @@ class CNNBase(NNBase):
             nn.ReLU()
         )
 
+        self.policy_network = nn.Sequential(
+            init_(nn.Linear(hidden_size, hidden_size)),
+            nn.ReLU(),
+            init_(nn.Linear(hidden_size, hidden_size)),
+            nn.ReLU(),
+        )
+
+
+
         self.train()
 
     def reparameterize(self, mu, logvar):
@@ -216,6 +225,8 @@ class CNNBase(NNBase):
         
         mu, rnn_hxs = self._forward_gru(x, rnn_hxs, masks, prev_action_one_hot)
 
+        policy = self.policy_network(mu.detach())
+
         if is_training:
             logvar = self.var_network(mu)
 
@@ -224,14 +235,14 @@ class CNNBase(NNBase):
             ob_reconstructed = self.decoder(z)
 
             # p-network
-            prev_x = (torch.cat((rnn_hxs_original, mu), dim=0)[:mu.shape[0]]).detach()
+            prev_x = torch.cat((rnn_hxs_original, mu), dim=0)[:mu.shape[0]]
             p_input = torch.cat((prev_x, prev_action_one_hot.view(-1, self.num_actions) * masks), dim=1)
             p_output = self.p_network(p_input)
             p_mu, p_logvar = torch.split(p_output, self.hidden_size, dim=1)
-            
-            return self.critic_linear(mu), mu, rnn_hxs, ob_original, ob_reconstructed, mu, logvar, p_mu, p_logvar
+
+            return self.critic_linear(policy), policy, rnn_hxs, ob_original, ob_reconstructed, mu, logvar, p_mu, p_logvar
         else:
-            return self.critic_linear(mu), mu, rnn_hxs
+            return self.critic_linear(policy), policy, rnn_hxs
 
         
 
