@@ -63,9 +63,9 @@ class A2C_ACKTR():
 
         # mse & kl
         reconstuct_mse = F.mse_loss(ob_reconstructed, ob_original)
-        kl = p_logvar - logvar + (logvar.exp() + (mu - p_mu).pow(2)) / (p_logvar.exp())
-        kl = kl.mean()
-        new_loss = self.mse_coef * reconstuct_mse + self.kl_coef * kl 
+        #kl = p_logvar - logvar + (logvar.exp() + (mu - p_mu).pow(2)) / (p_logvar.exp())
+        #kl = kl.mean()
+        new_loss = reconstuct_mse
 
 
         self.optimizer.zero_grad()
@@ -78,5 +78,4 @@ class A2C_ACKTR():
 
         self.optimizer.step()
 
-        return value_loss.item(), action_loss.item(), dist_entropy.item(), new_loss.item(), \
-            reconstuct_mse.item(), kl.item()
+        return value_loss.item(), action_loss.item(), dist_entropy.item(), new_loss.item()

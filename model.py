@@ -12,7 +12,7 @@ class Flatten(nn.Module):
 
 class UnFlatten(nn.Module):
     def forward(self, input):
-        return input.view(input.size(0), 32, 7, 7)
+        return input.view(input.size(0), 256, 3, 3)
 
 
 class Policy(nn.Module):
@@ -154,14 +154,16 @@ class CNNBase(NNBase):
             nn.init.calculate_gain('relu'))
 
         self.main = nn.Sequential(
-            init_(nn.Conv2d(num_inputs, 32, 8, stride=4)),
+            init_(nn.Conv2d(num_inputs, 32, 4, stride=2)),
             nn.ReLU(),
             init_(nn.Conv2d(32, 64, 4, stride=2)),
             nn.ReLU(),
-            init_(nn.Conv2d(64, 32, 3, stride=1)),
+            init_(nn.Conv2d(64, 128, 4, stride=2)),
+            nn.ReLU(),
+            init_(nn.Conv2d(128, 256, 4, stride=2)),
             nn.ReLU(),
             Flatten(),
-            init_(nn.Linear(32 * 7 * 7, hidden_size)),
+            init_(nn.Linear(256 * 3 * 3, hidden_size)),
             nn.ReLU()
         )
 
@@ -172,25 +174,27 @@ class CNNBase(NNBase):
         self.critic_linear = init2_(nn.Linear(hidden_size, 1))
 
         self.decoder = nn.Sequential(
-            init_(nn.Linear(hidden_size, 32 * 7 * 7)),
+            init_(nn.Linear(hidden_size, 256 * 3 * 3)),
             nn.ReLU(),
             UnFlatten(),
-            init_(nn.ConvTranspose2d(32, 64, kernel_size=3, stride=1)),
+            init_(nn.ConvTranspose2d(256, 128, kernel_size=4, stride=2)),
             nn.ReLU(),
-            init_(nn.ConvTranspose2d(64, 32, kernel_size=4, stride=2)),
+            init_(nn.ConvTranspose2d(128, 64, kernel_size=5, stride=2)),
             nn.ReLU(),
-            init_(nn.ConvTranspose2d(32, num_inputs, kernel_size=8, stride=4)),
+            init_(nn.ConvTranspose2d(64, 32, kernel_size=5, stride=2)),
+            nn.ReLU(),
+            init_(nn.ConvTranspose2d(32, num_inputs, kernel_size=4, stride=2)),
             nn.Sigmoid()
         )
 
-        dist_size = hidden_size * 2
+        # dist_size = hidden_size * 2
 
-        self.p_network = nn.Sequential(
-            init_(nn.Linear(hidden_size + num_actions, dist_size)),
-            nn.ReLU(),
-            init_(nn.Linear(dist_size, dist_size)),
-            nn.ReLU()
-        )
+        # self.p_network = nn.Sequential(
+        #     init_(nn.Linear(hidden_size + num_actions, dist_size)),
+        #     nn.ReLU(),
+        #     init_(nn.Linear(dist_size, dist_size)),
+        #     nn.ReLU()
+        # )
 
         self.var_network = nn.Sequential(
             init_(nn.Linear(hidden_size, hidden_size)),
@@ -234,13 +238,13 @@ class CNNBase(NNBase):
             z = self.reparameterize(mu, logvar)
             ob_reconstructed = self.decoder(z)
 
-            # p-network
-            prev_x = torch.cat((rnn_hxs_original, mu), dim=0)[:mu.shape[0]]
-            p_input = torch.cat((prev_x, prev_action_one_hot.view(-1, self.num_actions) * masks), dim=1)
-            p_output = self.p_network(p_input)
-            p_mu, p_logvar = torch.split(p_output, self.hidden_size, dim=1)
+            # # p-network
+            # prev_x = torch.cat((rnn_hxs_original, mu), dim=0)[:mu.shape[0]]
+            # p_input = torch.cat((prev_x, prev_action_one_hot.view(-1, self.num_actions) * masks), dim=1)
+            # p_output = self.p_network(p_input)
+            # p_mu, p_logvar = torch.split(p_output, self.hidden_size, dim=1)
 
-            return self.critic_linear(policy), policy, rnn_hxs, ob_original, ob_reconstructed, mu, logvar, p_mu, p_logvar
+            return self.critic_linear(policy), policy, rnn_hxs, ob_original, ob_reconstructed, mu, logvar, None, None
         else:
             return self.critic_linear(policy), policy, rnn_hxs
 
