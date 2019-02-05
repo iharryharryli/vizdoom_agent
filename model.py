@@ -183,14 +183,14 @@ class CNNBase(NNBase):
             nn.Sigmoid()
         )
 
-        dist_size = hidden_size * 2
+        # dist_size = hidden_size * 2
 
-        self.p_network = nn.Sequential(
-            init_(nn.Linear(hidden_size + num_actions, dist_size)),
-            nn.ReLU(),
-            init_(nn.Linear(dist_size, dist_size)),
-            nn.ReLU()
-        )
+        # self.p_network = nn.Sequential(
+        #     init_(nn.Linear(hidden_size + num_actions, dist_size)),
+        #     nn.ReLU(),
+        #     init_(nn.Linear(dist_size, dist_size)),
+        #     nn.ReLU()
+        # )
 
         self.var_network = nn.Sequential(
             init_(nn.Linear(hidden_size, hidden_size)),
@@ -224,12 +224,12 @@ class CNNBase(NNBase):
             ob_reconstructed = self.decoder(z)
 
             # p-network
-            prev_x = torch.cat((rnn_hxs_original, mu), dim=0)[:mu.shape[0]]
-            p_input = torch.cat((prev_x, prev_action_one_hot.view(-1, self.num_actions) * masks), dim=1)
-            p_output = self.p_network(p_input)
-            p_mu, p_logvar = torch.split(p_output, self.hidden_size, dim=1)
+            # prev_x = torch.cat((rnn_hxs_original, mu), dim=0)[:mu.shape[0]]
+            # p_input = torch.cat((prev_x, prev_action_one_hot.view(-1, self.num_actions) * masks), dim=1)
+            # p_output = self.p_network(p_input)
+            # p_mu, p_logvar = torch.split(p_output, self.hidden_size, dim=1)
             
-            return self.critic_linear(mu), mu, rnn_hxs, ob_original, ob_reconstructed, mu, logvar, p_mu, p_logvar
+            return self.critic_linear(mu), mu, rnn_hxs, ob_original, ob_reconstructed, mu, logvar, None, None
         else:
             return self.critic_linear(mu), mu, rnn_hxs
 
