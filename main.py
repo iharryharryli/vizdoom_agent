@@ -70,6 +70,7 @@ parameters['num_steps'] = args.num_steps
 parameters['num_processes'] = args.num_processes
 parameters['value_loss_coef'] = args.value_loss_coef
 parameters['mse_coef'] = args.mse_coef
+parameters['kl_coef'] = args.kl_coef
 parameters['a2c_coef'] = args.a2c_coef
 parameters['eps'] = args.eps
 parameters['entropy_coef'] = args.entropy_coef
@@ -119,7 +120,8 @@ actor_critic.to(device)
 
 if args.algo == 'a2c':
     agent = algo.A2C_ACKTR(actor_critic, parameters['value_loss_coef'],
-                               parameters['entropy_coef'], parameters['mse_coef'], parameters['a2c_coef'], 
+                               parameters['entropy_coef'], parameters['mse_coef'], 
+                               parameters['kl_coef'], parameters['a2c_coef'], 
                                lr=parameters['lr'],
                                eps=parameters['eps'], alpha=parameters['alpha'],
                                max_grad_norm=parameters['max_grad_norm'],
