@@ -12,7 +12,7 @@ class Flatten(nn.Module):
 
 class UnFlatten(nn.Module):
     def forward(self, input):
-        return input.view(input.size(0), 16, 7, 7)
+        return input.view(input.size(0), 32, 7, 7)
 
 
 class Policy(nn.Module):
@@ -147,7 +147,7 @@ class NNBase(nn.Module):
 
 class CNNBase(NNBase):
     def __init__(self, num_inputs, num_actions, device, recurrent=False, hidden_size=512):
-        hidden_size = 16 * 7 * 7 
+        hidden_size = 32 * 7 * 7 
 
         super(CNNBase, self).__init__(recurrent, num_actions, hidden_size)
 
@@ -161,38 +161,32 @@ class CNNBase(NNBase):
             nn.init.calculate_gain('relu'))
 
         self.main = nn.Sequential(
-            init_(nn.Conv2d(num_inputs, 32, 8, stride=1)),
+            init_(nn.Conv2d(num_inputs, 32, 8, stride=4)),
             nn.ReLU(),
             init_(nn.Conv2d(32, 64, 4, stride=2)),
             nn.ReLU(),
-            init_(nn.Conv2d(64, 32, 4, stride=2)),
-            nn.ReLU(),
-            init_(nn.Conv2d(32, 16, 4, stride=2)),
+            init_(nn.Conv2d(64, 32, 3, stride=1)),
             nn.ReLU(),
             Flatten(),
         )
 
         self.attention = nn.Sequential(
-            init_(nn.Conv2d(num_inputs, 32, 8, stride=1)),
+            init_(nn.Conv2d(num_inputs, 32, 8, stride=4)),
             nn.ReLU(),
             init_(nn.Conv2d(32, 64, 4, stride=2)),
             nn.ReLU(),
-            init_(nn.Conv2d(64, 32, 4, stride=2)),
-            nn.ReLU(),
-            init_(nn.Conv2d(32, 16, 4, stride=2)),
+            init_(nn.Conv2d(64, 32, 3, stride=1)),
             nn.Sigmoid(),
             Flatten(),
         )
 
         self.decoder = nn.Sequential(
             UnFlatten(),
-            init_(nn.ConvTranspose2d(16, 32, kernel_size=5, stride=2)),
+            init_(nn.ConvTranspose2d(32, 64, kernel_size=3, stride=1)),
             nn.ReLU(),
-            init_(nn.ConvTranspose2d(32, 64, kernel_size=5, stride=2)),
+            init_(nn.ConvTranspose2d(64, 32, kernel_size=4, stride=2)),
             nn.ReLU(),
-            init_(nn.ConvTranspose2d(64, 32, kernel_size=5, stride=2)),
-            nn.ReLU(),
-            init_(nn.ConvTranspose2d(32, num_inputs, kernel_size=8, stride=1)),
+            init_(nn.ConvTranspose2d(32, num_inputs, kernel_size=8, stride=4)),
             nn.Sigmoid()
         )
 
