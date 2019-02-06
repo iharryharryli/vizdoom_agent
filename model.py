@@ -110,44 +110,44 @@ class NNBase(nn.Module):
         #return self._hidden_size
         return self.hidden_size
 
-    def _forward_gru(self, x, hxs, masks, prev_action_one_hot):
-        if x.size(0) == hxs.size(0):
-            x2 = torch.cat((x, prev_action_one_hot * masks), dim=1)
-            x = hxs = self.gru(x2, hxs * masks)
-        else:
-            # x is a (T, N, -1) tensor that has been flatten to (T * N, -1)
-            N = hxs.size(0)
-            T = int(x.size(0) / N)
+    def _forward_gru(self, hxs, gru_init, masks, prev_action_one_hot):
+        # x is a (T, N, -1) tensor that has been flatten to (T * N, -1)
+        N = hxs.size(0)
+        T = int(gru_init.size(0) / N)
 
-            # unflatten
-            x = x.view(T, N, x.size(1))
+        # unflatten
 
-            # Same deal with masks
-            masks = masks.view(T, N, 1)
+        # Same deal with masks
+        masks = masks.view(T, N, 1)
 
-            outputs = []
-            for i in range(T):
-                x2 = torch.cat((x[i], prev_action_one_hot[i] * masks[i]), dim=1)
-                hx = hxs = self.gru(x2, hxs * masks[i])
-                outputs.append(hx)
+        # Same deal with gru_init
+        gru_init = gru_init.view(T, N, gru_init.size(1))
 
-            # assert len(outputs) == T
-            # x is a (T, N, -1) tensor
-            x = torch.stack(outputs, dim=0)
-            # flatten
-            x = x.view(T * N, -1)
+        outputs = []
+        for i in range(T):
+            hidden_state = hxs * masks[i] + gru_init[i] * (1 - masks[i])
+            hx = hxs = self.gru(prev_action_one_hot[i] * masks[i], hxs * masks[i])
+            outputs.append(hx)
+
+        # assert len(outputs) == T
+        # x is a (T, N, -1) tensor
+        x = torch.stack(outputs, dim=0)
+        # flatten
+        x = x.view(T * N, -1)
 
         return x, hxs
 
 
 class CNNBase(NNBase):
     def __init__(self, num_inputs, num_actions, device, recurrent=False, hidden_size=512):
-        super(CNNBase, self).__init__(recurrent, hidden_size + num_actions, hidden_size)
+        
+        dist_size = hidden_size * 2
+        super(CNNBase, self).__init__(recurrent, num_actions, dist_size)
 
         self.hidden_size = hidden_size
         self.num_actions = num_actions
         self.device = device
-
+        
         init_ = lambda m: init(m,
             nn.init.orthogonal_,
             lambda x: nn.init.constant_(x, 0),
@@ -161,15 +161,21 @@ class CNNBase(NNBase):
             init_(nn.Conv2d(64, 32, 3, stride=1)),
             nn.ReLU(),
             Flatten(),
-            init_(nn.Linear(32 * 7 * 7, hidden_size)),
+            init_(nn.Linear(32 * 7 * 7, dist_size)),
             nn.ReLU()
         )
 
-        init2_ = lambda m: init(m,
-            nn.init.orthogonal_,
-            lambda x: nn.init.constant_(x, 0))
-
-        self.critic_linear = init2_(nn.Linear(hidden_size, 1))
+        self.attention = nn.Sequential(
+            init_(nn.Conv2d(num_inputs, 32, 8, stride=4)),
+            nn.ReLU(),
+            init_(nn.Conv2d(32, 64, 4, stride=2)),
+            nn.ReLU(),
+            init_(nn.Conv2d(64, 32, 3, stride=1)),
+            nn.ReLU(),
+            Flatten(),
+            init_(nn.Linear(32 * 7 * 7, hidden_size)),
+            nn.Sigmoid()
+        )
 
         self.decoder = nn.Sequential(
             init_(nn.Linear(hidden_size, 32 * 7 * 7)),
@@ -183,21 +189,19 @@ class CNNBase(NNBase):
             nn.Sigmoid()
         )
 
-        dist_size = hidden_size * 2
 
-        self.p_network = nn.Sequential(
-            init_(nn.Linear(hidden_size + num_actions, dist_size)),
-            nn.ReLU(),
-            init_(nn.Linear(dist_size, dist_size)),
-            nn.ReLU()
-        )
-
-        self.var_network = nn.Sequential(
+        self.policy_network = nn.Sequential(
             init_(nn.Linear(hidden_size, hidden_size)),
             nn.ReLU(),
             init_(nn.Linear(hidden_size, hidden_size)),
             nn.ReLU()
         )
+
+        init2_ = lambda m: init(m,
+            nn.init.orthogonal_,
+            lambda x: nn.init.constant_(x, 0))
+
+        self.critic_linear = init2_(nn.Linear(hidden_size, 1))
 
         self.train()
 
@@ -213,25 +217,24 @@ class CNNBase(NNBase):
         rnn_hxs_original = rnn_hxs
 
         x = self.main(ob_original)
+        mu, logvar = torch.split(x, self.hidden_size, dim=1)
+        attention = self.attention(ob_original)
         
-        mu, rnn_hxs = self._forward_gru(x, rnn_hxs, masks, prev_action_one_hot)
+        p_x, rnn_hxs = self._forward_gru(rnn_hxs, x, masks, prev_action_one_hot)
+        p_mu, p_logvar = torch.split(p_x, self.hidden_size, dim=1)
+
+        attended_x = torch.mul(mu, attention) + torch.mul(p_mu, 1 - attention)
+
+        policy = self.policy_network(attended_x)
 
         if is_training:
-            logvar = self.var_network(mu)
-
             # reconstruct
             z = self.reparameterize(mu, logvar)
             ob_reconstructed = self.decoder(z)
-
-            # p-network
-            prev_x = torch.cat((rnn_hxs_original, mu), dim=0)[:mu.shape[0]]
-            p_input = torch.cat((prev_x, prev_action_one_hot.view(-1, self.num_actions) * masks), dim=1)
-            p_output = self.p_network(p_input)
-            p_mu, p_logvar = torch.split(p_output, self.hidden_size, dim=1)
             
-            return self.critic_linear(mu), mu, rnn_hxs, ob_original, ob_reconstructed, mu, logvar, p_mu, p_logvar
+            return self.critic_linear(policy), policy, rnn_hxs, ob_original, ob_reconstructed, mu, logvar, p_mu, p_logvar
         else:
-            return self.critic_linear(mu), mu, rnn_hxs
+            return self.critic_linear(policy), policy, rnn_hxs
 
         
 
