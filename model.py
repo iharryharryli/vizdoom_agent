@@ -12,7 +12,7 @@ class Flatten(nn.Module):
 
 class UnFlatten(nn.Module):
     def forward(self, input):
-        return input.view(input.size(0), 32, 7, 7)
+        return input.view(input.size(0), 16, 7, 7)
 
 
 class Policy(nn.Module):
@@ -110,39 +110,46 @@ class NNBase(nn.Module):
         #return self._hidden_size
         return self.hidden_size
 
-    def _forward_gru(self, hxs, gru_init, masks, prev_action_one_hot):
+    def _forward_gru(self, x, hxs, attention, masks, prev_action_one_hot):
         # x is a (T, N, -1) tensor that has been flatten to (T * N, -1)
         N = hxs.size(0)
-        T = int(gru_init.size(0) / N)
+        T = int(x.size(0) / N)
 
         # unflatten
+        x = x.view(T, N, x.size(1))
 
         # Same deal with masks
         masks = masks.view(T, N, 1)
 
-        # Same deal with gru_init
-        gru_init = gru_init.view(T, N, gru_init.size(1))
+        # Same deal with attention
+        attention = attention.view(T, N, attention.size(1))
 
-        outputs = []
+        p_mu_acc = []
+        attended_x_acc = []
         for i in range(T):
-            hidden_state = hxs * masks[i] + gru_init[i] * (1 - masks[i])
-            hx = hxs = self.gru(prev_action_one_hot[i] * masks[i], hxs * masks[i])
-            outputs.append(hx)
+            hidden_state = hxs * masks[i] + x[i] * (1 - masks[i])
+            p_mu = self.gru(prev_action_one_hot[i] * masks[i], hidden_state)
+            attended_x = hxs = torch.mul(x[i], attention[i]) + torch.mul(p_mu, 1 - attention[i])
 
+            p_mu_acc.append(p_mu)
+            attended_x_acc.append(attended_x)
+            
         # assert len(outputs) == T
         # x is a (T, N, -1) tensor
-        x = torch.stack(outputs, dim=0)
+        p_mu = torch.stack(p_mu_acc, dim=0)
+        attended_x = torch.stack(attended_x_acc, dim=0)
         # flatten
-        x = x.view(T * N, -1)
+        p_mu = p_mu.view(T * N, -1)
+        attended_x = attended_x.view(T * N, -1)
 
-        return x, hxs
+        return p_mu, attended_x, hxs
 
 
 class CNNBase(NNBase):
     def __init__(self, num_inputs, num_actions, device, recurrent=False, hidden_size=512):
-        
-        dist_size = hidden_size * 2
-        super(CNNBase, self).__init__(recurrent, num_actions, dist_size)
+        hidden_size = 16 * 7 * 7 
+
+        super(CNNBase, self).__init__(recurrent, num_actions, hidden_size)
 
         self.hidden_size = hidden_size
         self.num_actions = num_actions
@@ -154,41 +161,47 @@ class CNNBase(NNBase):
             nn.init.calculate_gain('relu'))
 
         self.main = nn.Sequential(
-            init_(nn.Conv2d(num_inputs, 32, 8, stride=4)),
+            init_(nn.Conv2d(num_inputs, 32, 8, stride=1)),
             nn.ReLU(),
             init_(nn.Conv2d(32, 64, 4, stride=2)),
             nn.ReLU(),
-            init_(nn.Conv2d(64, 32, 3, stride=1)),
+            init_(nn.Conv2d(64, 32, 4, stride=2)),
+            nn.ReLU(),
+            init_(nn.Conv2d(32, 16, 4, stride=2)),
             nn.ReLU(),
             Flatten(),
-            init_(nn.Linear(32 * 7 * 7, dist_size)),
-            nn.ReLU()
         )
 
         self.attention = nn.Sequential(
-            init_(nn.Conv2d(num_inputs, 32, 8, stride=4)),
+            init_(nn.Conv2d(num_inputs, 32, 8, stride=1)),
             nn.ReLU(),
             init_(nn.Conv2d(32, 64, 4, stride=2)),
             nn.ReLU(),
-            init_(nn.Conv2d(64, 32, 3, stride=1)),
+            init_(nn.Conv2d(64, 32, 4, stride=2)),
             nn.ReLU(),
+            init_(nn.Conv2d(32, 16, 4, stride=2)),
+            nn.Sigmoid(),
             Flatten(),
-            init_(nn.Linear(32 * 7 * 7, hidden_size)),
-            nn.Sigmoid()
         )
 
         self.decoder = nn.Sequential(
-            init_(nn.Linear(hidden_size, 32 * 7 * 7)),
-            nn.ReLU(),
             UnFlatten(),
-            init_(nn.ConvTranspose2d(32, 64, kernel_size=3, stride=1)),
+            init_(nn.ConvTranspose2d(16, 32, kernel_size=5, stride=2)),
             nn.ReLU(),
-            init_(nn.ConvTranspose2d(64, 32, kernel_size=4, stride=2)),
+            init_(nn.ConvTranspose2d(32, 64, kernel_size=5, stride=2)),
             nn.ReLU(),
-            init_(nn.ConvTranspose2d(32, num_inputs, kernel_size=8, stride=4)),
+            init_(nn.ConvTranspose2d(64, 32, kernel_size=5, stride=2)),
+            nn.ReLU(),
+            init_(nn.ConvTranspose2d(32, num_inputs, kernel_size=8, stride=1)),
             nn.Sigmoid()
         )
 
+        self.var_network = nn.Sequential(
+            init_(nn.Linear(hidden_size, hidden_size)),
+            nn.ReLU(),
+            init_(nn.Linear(hidden_size, hidden_size)),
+            nn.ReLU()
+        )
 
         self.policy_network = nn.Sequential(
             init_(nn.Linear(hidden_size, hidden_size)),
@@ -216,19 +229,17 @@ class CNNBase(NNBase):
         ob_original = inputs / 255.0
         rnn_hxs_original = rnn_hxs
 
-        x = self.main(ob_original)
-        mu, logvar = torch.split(x, self.hidden_size, dim=1)
+        mu = self.main(ob_original)
         attention = self.attention(ob_original)
         
-        p_x, rnn_hxs = self._forward_gru(rnn_hxs, x, masks, prev_action_one_hot)
-        p_mu, p_logvar = torch.split(p_x, self.hidden_size, dim=1)
-
-        attended_x = torch.mul(mu, attention) + torch.mul(p_mu, 1 - attention)
+        p_mu, attended_x, rnn_hxs = self._forward_gru(mu, rnn_hxs, attention, masks, prev_action_one_hot)
 
         policy = self.policy_network(attended_x)
 
         if is_training:
             # reconstruct
+            logvar = self.var_network(mu)
+            p_logvar = self.var_network(p_mu)
             z = self.reparameterize(mu, logvar)
             ob_reconstructed = self.decoder(z)
             
