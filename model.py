@@ -234,10 +234,12 @@ class CNNBase(NNBase):
             # reconstruct
             logvar = self.var_network(mu)
             p_logvar = self.var_network(p_mu)
+            attended_logvar = self.var_network(attended_x)
             z = self.reparameterize(mu, logvar)
             ob_reconstructed = self.decoder(z)
             
-            return self.critic_linear(policy), policy, rnn_hxs, ob_original, ob_reconstructed, mu, logvar, p_mu, p_logvar
+            return self.critic_linear(policy), policy, rnn_hxs, ob_original, ob_reconstructed, \
+             attended_x, attended_logvar, p_mu, p_logvar
         else:
             return self.critic_linear(policy), policy, rnn_hxs
 
