@@ -68,7 +68,7 @@ class Policy(nn.Module):
         return value
 
     def evaluate_actions(self, inputs, rnn_hxs, masks, prev_action_one_hot, action):
-        value, actor_features, rnn_hxs, ob_original, ob_reconstructed, mu, logvar, p_mu, p_logvar = self.base(inputs, 
+        value, actor_features, rnn_hxs, ob_original, ob_reconstructed, mu, logvar, p_mu, p_logvar, attention = self.base(inputs, 
             rnn_hxs, masks, prev_action_one_hot, is_training=True)
         
         dist = self.dist(actor_features)
@@ -77,7 +77,7 @@ class Policy(nn.Module):
         dist_entropy = dist.entropy().mean()
 
         return value, action_log_probs, dist_entropy, rnn_hxs, ob_original, ob_reconstructed, \
-        mu, logvar, p_mu, p_logvar
+        mu, logvar, p_mu, p_logvar, attention
 
 
 class NNBase(nn.Module):
@@ -234,12 +234,11 @@ class CNNBase(NNBase):
             # reconstruct
             logvar = self.var_network(mu)
             p_logvar = self.var_network(p_mu)
-            attended_logvar = self.var_network(attended_x)
             z = self.reparameterize(mu, logvar)
             ob_reconstructed = self.decoder(z)
             
             return self.critic_linear(policy), policy, rnn_hxs, ob_original, ob_reconstructed, \
-             attended_x, attended_logvar, p_mu, p_logvar
+             mu, logvar, p_mu, p_logvar, attention
         else:
             return self.critic_linear(policy), policy, rnn_hxs
 
