@@ -194,7 +194,8 @@ class CNNBase(NNBase):
             init_(nn.Linear(hidden_size, hidden_size)),
             nn.ReLU(),
             init_(nn.Linear(hidden_size, hidden_size)),
-            nn.ReLU()
+            nn.ReLU(),
+            init_(nn.Linear(hidden_size, hidden_size))
         )
 
         self.policy_network = nn.Sequential(
