@@ -14,6 +14,16 @@ init2_ = lambda m: init(m,
     nn.init.orthogonal_,
     lambda x: nn.init.constant_(x, 0))
 
+init3_ = lambda m: init(m,
+            nn.init.orthogonal_,
+            lambda x: nn.init.constant_(x, 0),
+            nn.init.calculate_gain('tanh'))
+
+init4_ = lambda m: init(m,
+            nn.init.orthogonal_,
+            lambda x: nn.init.constant_(x, 0),
+            nn.init.calculate_gain('sigmoid'))
+
 class Flatten(nn.Module):
     def forward(self, x):
         return x.view(x.size(0), -1)
@@ -36,19 +46,19 @@ class ConvGRUCell(nn.Module):
         self.reset_gate = nn.Sequential(
             init_(nn.Conv2d(input_size + hidden_size, hidden_size, kernel_size, padding=padding)),
             nn.ReLU(),
-            init_(nn.Conv2d(hidden_size, hidden_size, kernel_size, padding=padding)),
+            init4_(nn.Conv2d(hidden_size, hidden_size, kernel_size, padding=padding)),
         )
 
         self.update_gate = nn.Sequential(
             init_(nn.Conv2d(input_size + hidden_size, hidden_size, kernel_size, padding=padding)),
             nn.ReLU(),
-            init_(nn.Conv2d(hidden_size, hidden_size, kernel_size, padding=padding)),
+            init4_(nn.Conv2d(hidden_size, hidden_size, kernel_size, padding=padding)),
         )
 
         self.out_gate = nn.Sequential(
             init_(nn.Conv2d(input_size + hidden_size, hidden_size, kernel_size, padding=padding)),
             nn.ReLU(),
-            init_(nn.Conv2d(hidden_size, hidden_size, kernel_size, padding=padding)),
+            init3_(nn.Conv2d(hidden_size, hidden_size, kernel_size, padding=padding)),
         )
 
 
@@ -240,8 +250,8 @@ class CNNBase(NNBase):
             nn.ReLU(),
             init_(nn.Conv2d(32, 64, 4, stride=2)),
             nn.ReLU(),
-            init_(nn.Conv2d(64, 32, 3, stride=1)),
-            nn.ReLU(),
+            init3_(nn.Conv2d(64, 32, 3, stride=1)),
+            nn.Tanh(),
             Flatten(),
         )
 
