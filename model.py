@@ -160,6 +160,10 @@ class CNNBase(NNBase):
             lambda x: nn.init.constant_(x, 0),
             nn.init.calculate_gain('relu'))
 
+        init2_ = lambda m: init(m,
+            nn.init.orthogonal_,
+            lambda x: nn.init.constant_(x, 0))
+
         self.main = nn.Sequential(
             init_(nn.Conv2d(num_inputs, 32, 8, stride=4)),
             nn.ReLU(),
@@ -195,7 +199,7 @@ class CNNBase(NNBase):
             nn.ReLU(),
             init_(nn.Linear(hidden_size, hidden_size)),
             nn.ReLU(),
-            init_(nn.Linear(hidden_size, hidden_size))
+            init2_(nn.Linear(hidden_size, hidden_size))
         )
 
         self.policy_network = nn.Sequential(
@@ -204,10 +208,6 @@ class CNNBase(NNBase):
             init_(nn.Linear(hidden_size, hidden_size)),
             nn.ReLU()
         )
-
-        init2_ = lambda m: init(m,
-            nn.init.orthogonal_,
-            lambda x: nn.init.constant_(x, 0))
 
         self.critic_linear = init2_(nn.Linear(hidden_size, 1))
 
@@ -242,45 +242,3 @@ class CNNBase(NNBase):
              mu, logvar, p_mu, p_logvar, attention
         else:
             return self.critic_linear(policy), policy, rnn_hxs
-
-        
-
-class MLPBase(NNBase):
-    def __init__(self, num_inputs, recurrent=False, hidden_size=64):
-        super(MLPBase, self).__init__(recurrent, num_inputs, hidden_size)
-
-        if recurrent:
-            num_inputs = hidden_size
-
-        init_ = lambda m: init(m,
-            init_normc_,
-            lambda x: nn.init.constant_(x, 0))
-
-        self.actor = nn.Sequential(
-            init_(nn.Linear(num_inputs, hidden_size)),
-            nn.Tanh(),
-            init_(nn.Linear(hidden_size, hidden_size)),
-            nn.Tanh()
-        )
-
-        self.critic = nn.Sequential(
-            init_(nn.Linear(num_inputs, hidden_size)),
-            nn.Tanh(),
-            init_(nn.Linear(hidden_size, hidden_size)),
-            nn.Tanh()
-        )
-
-        self.critic_linear = init_(nn.Linear(hidden_size, 1))
-
-        self.train()
-
-    def forward(self, inputs, rnn_hxs, masks):
-        x = inputs
-
-        if self.is_recurrent:
-            x, rnn_hxs = self._forward_gru(x, rnn_hxs, masks)
-
-        hidden_critic = self.critic(x)
-        hidden_actor = self.actor(x)
-
-        return self.critic_linear(hidden_critic), hidden_actor, rnn_hxs
