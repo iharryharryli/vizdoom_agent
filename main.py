@@ -132,7 +132,7 @@ else:
 
 rollouts = RolloutStorage(parameters['num_steps'], parameters['num_processes'],
                     envs.observation_space.shape, envs.action_space,
-                    actor_critic.recurrent_hidden_state_size)
+                    actor_critic.base.hidden_size, actor_critic.base.p_hidden_size)
 
 
 obs = envs.reset()
@@ -159,9 +159,11 @@ for j in range(num_updates_init, num_updates):
     for step in range(parameters['num_steps']):
         # Sample actions
         with torch.no_grad():
-            value, action, action_log_prob, recurrent_hidden_states = actor_critic.act(
+            value, action, action_log_prob, recurrent_hidden_states, \
+            p_recurrent_hidden_states = actor_critic.act(
                     rollouts.obs[step],
                     rollouts.recurrent_hidden_states[step],
+                    rollouts.p_recurrent_hidden_states[step],
                     rollouts.masks[step],
                     rollouts.prev_action_one_hot[step])
 
@@ -177,7 +179,8 @@ for j in range(num_updates_init, num_updates):
         # If done then clean the history of observations.
         masks = torch.FloatTensor([[0.0] if done_ else [1.0]
                                    for done_ in done])
-        rollouts.insert(obs, recurrent_hidden_states, action, action_log_prob, value, reward, masks)
+        rollouts.insert(obs, recurrent_hidden_states,
+        p_recurrent_hidden_states, action, action_log_prob, value, reward, masks)
 
     
     
@@ -185,6 +188,7 @@ for j in range(num_updates_init, num_updates):
     with torch.no_grad():
         next_value = actor_critic.get_value(rollouts.obs[-1],
                                             rollouts.recurrent_hidden_states[-1],
+                                            rollouts.p_recurrent_hidden_states[-1],
                                             rollouts.masks[-1],
                                             rollouts.prev_action_one_hot[-1]).detach()
 
