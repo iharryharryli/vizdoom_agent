@@ -5,6 +5,14 @@ import torch.nn.functional as F
 from distributions import Categorical, DiagGaussian
 from utils import init, init_normc_
 
+init_ = lambda m: init(m,
+            nn.init.orthogonal_,
+            lambda x: nn.init.constant_(x, 0),
+            nn.init.calculate_gain('relu'))
+
+init2_ = lambda m: init(m,
+    nn.init.orthogonal_,
+    lambda x: nn.init.constant_(x, 0))
 
 class Flatten(nn.Module):
     def forward(self, x):
@@ -13,6 +21,65 @@ class Flatten(nn.Module):
 class UnFlatten(nn.Module):
     def forward(self, input):
         return input.view(input.size(0), 32, 7, 7)
+
+class ConvGRUCell(nn.Module):
+    """
+    Generate a convolutional GRU cell
+    """
+
+    def __init__(self, input_size, hidden_size, kernel_size):
+        super().__init__()
+        padding = kernel_size // 2
+        self.input_size = input_size
+        self.hidden_size = hidden_size
+
+        self.reset_gate = nn.Sequential(
+            init_(nn.Conv2d(input_size + hidden_size, hidden_size, kernel_size, padding=padding)),
+            nn.ReLU(),
+            init_(nn.Conv2d(hidden_size, hidden_size, kernel_size, padding=padding)),
+        )
+
+        self.update_gate = nn.Sequential(
+            init_(nn.Conv2d(input_size + hidden_size, hidden_size, kernel_size, padding=padding)),
+            nn.ReLU(),
+            init_(nn.Conv2d(hidden_size, hidden_size, kernel_size, padding=padding)),
+        )
+
+        self.out_gate = nn.Sequential(
+            init_(nn.Conv2d(input_size + hidden_size, hidden_size, kernel_size, padding=padding)),
+            nn.ReLU(),
+            init_(nn.Conv2d(hidden_size, hidden_size, kernel_size, padding=padding)),
+        )
+
+
+    def forward(self, input_, prev_state):
+
+        in_channel = 32
+        wid = 7
+
+        prev_state = prev_state.view(-1, in_channel, wid, wid)
+
+        input_ = input_[:,:,None]
+        input_ = input_.repeat(1, 1, wid * wid)
+        input_ = input_.view(input_.size(0), input_.size(1), wid, wid)
+
+        # print(input_.shape, prev_state.shape)
+        # raise ValueError
+
+        # get batch and spatial sizes
+        batch_size = input_.data.size()[0]
+        spatial_size = input_.data.size()[2:]
+
+        # data size is [batch, channel, height, width]
+        stacked_inputs = torch.cat([input_, prev_state], dim=1)
+        update = F.sigmoid(self.update_gate(stacked_inputs))
+        reset = F.sigmoid(self.reset_gate(stacked_inputs))
+        out_inputs = F.tanh(self.out_gate(torch.cat([input_, prev_state * reset], dim=1)))
+        new_state = prev_state * (1 - update) + out_inputs * update
+
+        new_state = new_state.view(-1, in_channel * wid * wid)
+
+        return new_state 
 
 
 class Policy(nn.Module):
@@ -91,11 +158,7 @@ class NNBase(nn.Module):
             self.gru.bias_ih.data.fill_(0)
             self.gru.bias_hh.data.fill_(0)
 
-            self.p_gru = nn.GRUCell(num_actions, p_hidden_size)
-            nn.init.orthogonal_(self.p_gru.weight_ih.data)
-            nn.init.orthogonal_(self.p_gru.weight_hh.data)
-            self.p_gru.bias_ih.data.fill_(0)
-            self.p_gru.bias_hh.data.fill_(0)
+            self.p_gru = ConvGRUCell(num_actions, 32, 3)
 
     @property
     def is_recurrent(self):
@@ -171,15 +234,6 @@ class CNNBase(NNBase):
         self.p_hidden_size = p_hidden_size
         self.num_actions = num_actions
         self.device = device
-        
-        init_ = lambda m: init(m,
-            nn.init.orthogonal_,
-            lambda x: nn.init.constant_(x, 0),
-            nn.init.calculate_gain('relu'))
-
-        init2_ = lambda m: init(m,
-            nn.init.orthogonal_,
-            lambda x: nn.init.constant_(x, 0))
 
         self.main = nn.Sequential(
             init_(nn.Conv2d(num_inputs, 32, 8, stride=4)),
