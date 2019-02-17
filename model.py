@@ -14,6 +14,25 @@ class UnFlatten(nn.Module):
     def forward(self, input):
         return input.view(input.size(0), 32, 7, 7)
 
+init_ = lambda m: init(m,
+            nn.init.orthogonal_,
+            lambda x: nn.init.constant_(x, 0),
+            nn.init.calculate_gain('relu'))
+
+init2_ = lambda m: init(m,
+    nn.init.orthogonal_,
+    lambda x: nn.init.constant_(x, 0))
+
+init3_ = lambda m: init(m,
+    nn.init.orthogonal_,
+    lambda x: nn.init.constant_(x, 0),
+    nn.init.calculate_gain('tanh'))
+
+init4_ = lambda m: init(m,
+    nn.init.orthogonal_,
+    lambda x: nn.init.constant_(x, 0),
+    nn.init.calculate_gain('sigmoid'))
+
 
 class Policy(nn.Module):
     def __init__(self, obs_shape, action_space, device, base_kwargs=None):
@@ -77,11 +96,11 @@ class Policy(nn.Module):
 
 class NNBase(nn.Module):
 
-    def __init__(self, recurrent, num_actions, p_hidden_size, hidden_size):
+    def __init__(self, recurrent, num_actions, hidden_size):
         super(NNBase, self).__init__()
 
         self.hidden_size = hidden_size
-        self.p_hidden_size = p_hidden_size
+        self.p_hidden_size = hidden_size
         self._recurrent = recurrent
 
         if recurrent:
@@ -91,11 +110,13 @@ class NNBase(nn.Module):
             self.gru.bias_ih.data.fill_(0)
             self.gru.bias_hh.data.fill_(0)
 
-            self.p_gru = nn.GRUCell(num_actions, p_hidden_size)
-            nn.init.orthogonal_(self.p_gru.weight_ih.data)
-            nn.init.orthogonal_(self.p_gru.weight_hh.data)
-            self.p_gru.bias_ih.data.fill_(0)
-            self.p_gru.bias_hh.data.fill_(0)
+            self.p_network = nn.Sequential(
+                init_(nn.Linear(hidden_size + num_actions, hidden_size)),
+                nn.ReLU(),
+                init_(nn.Linear(hidden_size, hidden_size)),
+                nn.ReLU(),
+                init2_(nn.Linear(hidden_size, 2 * hidden_size)),
+            )
 
     @property
     def is_recurrent(self):
@@ -115,25 +136,27 @@ class NNBase(nn.Module):
         # Same deal with attention
         attention = attention.view(T, N, attention.size(1))
 
-        p_mu_acc = []
+        p_dist_acc = []
         attended_x_acc = []
         for i in range(T):
             hidden_state = hxs * masks[i] + x[i] * (1 - masks[i])
-            p_mu = self.p_gru(prev_action_one_hot[i] * masks[i], hidden_state)
+            cur_input = torch.cat((prev_action_one_hot[i] * masks[i], hidden_state), dim=1)
+            p_dist = self.p_network(cur_input)
+            p_mu, p_logvar = torch.split(p_dist, self.hidden_size, dim=1)
             attended_x = hxs = torch.mul(x[i], attention[i]) + torch.mul(p_mu, 1 - attention[i])
 
-            p_mu_acc.append(p_mu)
+            p_dist_acc.append(p_dist)
             attended_x_acc.append(attended_x)
             
         # assert len(outputs) == T
         # x is a (T, N, -1) tensor
-        p_mu = torch.stack(p_mu_acc, dim=0)
+        p_dist = torch.stack(p_dist_acc, dim=0)
         attended_x = torch.stack(attended_x_acc, dim=0)
         # flatten
-        p_mu = p_mu.view(T * N, -1)
+        p_dist = p_dist.view(T * N, -1)
         attended_x = attended_x.view(T * N, -1)
 
-        return p_mu, attended_x, hxs
+        return p_dist, attended_x, hxs
 
     def _forward_gru(self, x, hxs, masks):
         # x is a (T, N, -1) tensor that has been flatten to (T * N, -1)
@@ -163,37 +186,22 @@ class NNBase(nn.Module):
 
 class CNNBase(NNBase):
     def __init__(self, num_inputs, num_actions, device, recurrent=False, hidden_size=512):
-        p_hidden_size = 32 * 7 * 7 
-
-        super(CNNBase, self).__init__(recurrent, num_actions, p_hidden_size, hidden_size)
+        super(CNNBase, self).__init__(recurrent, num_actions, hidden_size)
 
         self.hidden_size = hidden_size
-        self.p_hidden_size = p_hidden_size
         self.num_actions = num_actions
         self.device = device
-        
-        init_ = lambda m: init(m,
-            nn.init.orthogonal_,
-            lambda x: nn.init.constant_(x, 0),
-            nn.init.calculate_gain('relu'))
-
-        init2_ = lambda m: init(m,
-            nn.init.orthogonal_,
-            lambda x: nn.init.constant_(x, 0))
-
-        init3_ = lambda m: init(m,
-            nn.init.orthogonal_,
-            lambda x: nn.init.constant_(x, 0),
-            nn.init.calculate_gain('tanh'))
 
         self.main = nn.Sequential(
             init_(nn.Conv2d(num_inputs, 32, 8, stride=4)),
             nn.ReLU(),
             init_(nn.Conv2d(32, 64, 4, stride=2)),
             nn.ReLU(),
-            init3_(nn.Conv2d(64, 32, 3, stride=1)),
-            nn.Tanh(),
+            init_(nn.Conv2d(64, 32, 3, stride=1)),
+            nn.ReLU(),
             Flatten(),
+            init2_(nn.Linear(32 * 7 * 7, hidden_size * 2)),
+            nn.ReLU()
         )
 
         self.attention = nn.Sequential(
@@ -202,30 +210,26 @@ class CNNBase(NNBase):
             init_(nn.Conv2d(32, 64, 4, stride=2)),
             nn.ReLU(),
             init_(nn.Conv2d(64, 32, 3, stride=1)),
-            nn.Sigmoid(),
+            nn.ReLU(),
             Flatten(),
+            init4_(nn.Linear(32 * 7 * 7, hidden_size)),
+            nn.Sigmoid()
         )
 
         self.decoder = nn.Sequential(
+            init_(nn.Linear(hidden_size, 32 * 7 * 7)),
+            nn.ReLU(),
             UnFlatten(),
             init_(nn.ConvTranspose2d(32, 64, kernel_size=3, stride=1)),
             nn.ReLU(),
             init_(nn.ConvTranspose2d(64, 32, kernel_size=4, stride=2)),
             nn.ReLU(),
-            init_(nn.ConvTranspose2d(32, num_inputs, kernel_size=8, stride=4)),
+            init4_(nn.ConvTranspose2d(32, num_inputs, kernel_size=8, stride=4)),
             nn.Sigmoid()
         )
 
-        self.var_network = nn.Sequential(
-            init_(nn.Linear(p_hidden_size, p_hidden_size)),
-            nn.ReLU(),
-            init_(nn.Linear(p_hidden_size, p_hidden_size)),
-            nn.ReLU(),
-            init2_(nn.Linear(p_hidden_size, p_hidden_size))
-        )
-
         self.policy_network = nn.Sequential(
-            init_(nn.Linear(p_hidden_size, hidden_size)),
+            init_(nn.Linear(hidden_size, hidden_size)),
             nn.ReLU(),
             init_(nn.Linear(hidden_size, hidden_size)),
             nn.ReLU()
@@ -245,18 +249,19 @@ class CNNBase(NNBase):
     def forward(self, inputs, rnn, p_rnn, masks, prev_action_one_hot, is_training=False):
         ob_original = inputs / 255.0
 
-        mu = self.main(ob_original)
+        dist = self.main(ob_original)
         attention = self.attention(ob_original)
+
+        mu, logvar = torch.split(dist, self.hidden_size, dim=1)
         
-        p_mu, attended_x, p_rnn = self._forward_p_gru(mu, p_rnn, attention, masks, prev_action_one_hot)
+        p_dist, attended_x, p_rnn = self._forward_p_gru(mu, p_rnn, attention, masks, prev_action_one_hot)
 
         policy = self.policy_network(attended_x)
         policy, rnn = self._forward_gru(policy, rnn, masks)
 
         if is_training:
             # reconstruct
-            logvar = self.var_network(mu)
-            p_logvar = self.var_network(p_mu)
+            p_mu, p_logvar = torch.split(p_dist, self.hidden_size, dim=1)
             z = self.reparameterize(mu, logvar)
             ob_reconstructed = self.decoder(z)
             
