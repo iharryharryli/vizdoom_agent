@@ -201,7 +201,6 @@ class CNNBase(NNBase):
             nn.ReLU(),
             Flatten(),
             init2_(nn.Linear(32 * 7 * 7, hidden_size * 2)),
-            nn.ReLU()
         )
 
         self.attention = nn.Sequential(
