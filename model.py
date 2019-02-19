@@ -134,7 +134,7 @@ class NNBase(nn.Module):
         masks = masks.view(T, N, 1)
 
         # Same deal with attention
-        attention = attention.view(T, N, attention.size(1))
+        # attention = attention.view(T, N, attention.size(1))
 
         p_dist_acc = []
         attended_x_acc = []
@@ -143,7 +143,8 @@ class NNBase(nn.Module):
             cur_input = torch.cat((prev_action_one_hot[i] * masks[i], hidden_state), dim=1)
             p_dist = self.p_network(cur_input)
             p_mu, p_logvar = torch.split(p_dist, self.hidden_size, dim=1)
-            attended_x = hxs = torch.mul(x[i], attention[i]) + torch.mul(p_mu, 1 - attention[i])
+            # attended_x = hxs = torch.mul(x[i], attention[i]) + torch.mul(p_mu, 1 - attention[i])
+            attended_x = hxs = x[i]
 
             p_dist_acc.append(p_dist)
             attended_x_acc.append(attended_x)
@@ -203,17 +204,17 @@ class CNNBase(NNBase):
             init2_(nn.Linear(32 * 7 * 7, hidden_size * 2)),
         )
 
-        self.attention = nn.Sequential(
-            init_(nn.Conv2d(num_inputs, 32, 8, stride=4)),
-            nn.ReLU(),
-            init_(nn.Conv2d(32, 64, 4, stride=2)),
-            nn.ReLU(),
-            init_(nn.Conv2d(64, 32, 3, stride=1)),
-            nn.ReLU(),
-            Flatten(),
-            init4_(nn.Linear(32 * 7 * 7, hidden_size)),
-            nn.Sigmoid()
-        )
+        # self.attention = nn.Sequential(
+        #     init_(nn.Conv2d(num_inputs, 32, 8, stride=4)),
+        #     nn.ReLU(),
+        #     init_(nn.Conv2d(32, 64, 4, stride=2)),
+        #     nn.ReLU(),
+        #     init_(nn.Conv2d(64, 32, 3, stride=1)),
+        #     nn.ReLU(),
+        #     Flatten(),
+        #     init4_(nn.Linear(32 * 7 * 7, hidden_size)),
+        #     nn.Sigmoid()
+        # )
 
         self.decoder = nn.Sequential(
             init_(nn.Linear(hidden_size, 32 * 7 * 7)),
@@ -249,7 +250,8 @@ class CNNBase(NNBase):
         ob_original = inputs / 255.0
 
         dist = self.main(ob_original)
-        attention = self.attention(ob_original)
+        # attention = self.attention(ob_original)
+        attention = None
 
         mu, logvar = torch.split(dist, self.hidden_size, dim=1)
         
