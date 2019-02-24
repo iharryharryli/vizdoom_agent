@@ -63,16 +63,16 @@ class A2C_ACKTR():
         action_loss = -(advantages.detach() * action_log_probs).mean()
 
         # mse & kl
-        reconstuct_mse = F.mse_loss(ob_reconstructed, ob_original)
-        kl = p_logvar - logvar + (logvar.exp() + (mu - p_mu).pow(2)) / (p_logvar.exp())
-        # kl = torch.mul(kl, (attention.detach() > 0.8).float()).mean()
-        kl = kl.mean()
-        new_loss = self.mse_coef * reconstuct_mse + self.kl_coef * kl 
+        # reconstuct_mse = F.mse_loss(ob_reconstructed, ob_original)
+        # kl = p_logvar - logvar + (logvar.exp() + (mu - p_mu).pow(2)) / (p_logvar.exp())
+        # # kl = torch.mul(kl, (attention.detach() > 0.8).float()).mean()
+        # kl = kl.mean()
+        # new_loss = self.mse_coef * reconstuct_mse + self.kl_coef * kl 
 
 
         self.optimizer.zero_grad()
         (value_loss * self.value_loss_coef + action_loss -
-         dist_entropy * self.entropy_coef + new_loss).backward()
+         dist_entropy * self.entropy_coef).backward()
 
         if self.acktr == False:
             nn.utils.clip_grad_norm_(self.actor_critic.parameters(),
@@ -80,5 +80,4 @@ class A2C_ACKTR():
 
         self.optimizer.step()
 
-        return value_loss.item(), action_loss.item(), dist_entropy.item(), \
-            reconstuct_mse.item(), kl.item()
+        return value_loss.item(), action_loss.item(), dist_entropy.item()

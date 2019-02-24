@@ -61,6 +61,13 @@ if not args.continue_training:
             os.remove(f)
         except OSError:
             pass
+else:
+    for f in [reward_history, loss_history]:
+        try:
+            os.remove(f)
+        except OSError:
+            pass
+
 
 
 parameters = {}
@@ -95,10 +102,11 @@ if parameters['use_gae']:
 
 if args.continue_training:
     parameters = json.load(open(parameter_save))
-    env_arg = json.load(open(env_parameter_save))
+    #env_arg = json.load(open(env_parameter_save))
 else:
     json.dump(parameters, open(parameter_save, "w"))
-    json.dump(env_arg, open(env_parameter_save, "w"))
+
+json.dump(env_arg, open(env_parameter_save, "w"))
 
 
 
@@ -146,7 +154,7 @@ episode_lengths = deque(maxlen=recent_count)
 if args.continue_training:
     progress = json.load(open(progress_save))
     num_updates_init = progress["last_saved_num_updates"] 
-    actor_critic.load_state_dict(torch.load(MODEL_SAVE_PATH, map_location=device))
+    actor_critic.load_state_dict(torch.load(MODEL_SAVE_PATH, map_location=device), strict=False)
 else:
     num_updates_init = 0
     progress = {
