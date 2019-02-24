@@ -143,7 +143,7 @@ class NNBase(nn.Module):
             cur_input = torch.cat((prev_action_one_hot[i] * masks[i], hidden_state), dim=1)
             p_dist = self.p_network(cur_input)
             p_mu, p_logvar = torch.split(p_dist, self.hidden_size, dim=1)
-            attended_x = hxs = torch.mul(x[i], attention[i]) + torch.mul(p_mu, 1 - attention[i])
+            attended_x = hxs = torch.mul(x[i].detach(), attention[i]) + torch.mul(p_mu.detach(), 1 - attention[i])
             #attended_x = hxs = x[i]
 
             p_dist_acc.append(p_dist)
