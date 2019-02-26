@@ -120,8 +120,6 @@ class ViZDoomENV:
 
     
     def step(self, action):
-        info = {}
-
         #decide if drop input
         if self.drop_input_prob > 0.00001:
             if self.total_length > drop_input_init_safe_len and \
@@ -135,6 +133,11 @@ class ViZDoomENV:
 
         self.total_reward += reward
         self.total_length += 1
+
+        ob_is_valid = 1.0
+        if self.is_dropping_input:
+            ob_is_valid = 0.0
+        info = {'ob_is_valid': ob_is_valid}
 
         if done:
             info['Episode_Total_Reward'] = self.total_reward

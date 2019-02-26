@@ -45,9 +45,10 @@ class A2C_ACKTR():
         action_shape = rollouts.actions.size()[-1]
         num_steps, num_processes, _ = rollouts.rewards.size()
 
-        values, action_log_probs, dist_entropy, ob_original, ob_reconstructed, mu, logvar, p_mu, p_logvar, attention =\
+        values, action_log_probs, dist_entropy, ob_original, ob_reconstructed, q_mu, q_logvar, p_mu, p_logvar, ob_is_valid =\
          self.actor_critic.evaluate_actions(
                 rollouts.obs[:-1].view(-1, *obs_shape),
+                rollouts.ob_is_valid[:-1].view(-1, 1),
                 rollouts.recurrent_hidden_states[0].view(-1, self.actor_critic.base.hidden_size),
                 rollouts.p_recurrent_hidden_states[0].view(-1, self.actor_critic.base.p_hidden_size),
                 rollouts.masks[:-1].view(-1, 1),
@@ -64,11 +65,9 @@ class A2C_ACKTR():
 
         # mse & kl
         reconstuct_mse = F.mse_loss(ob_reconstructed, ob_original)
-        kl = p_logvar - logvar + (logvar.exp() + (mu - p_mu).pow(2)) / (p_logvar.exp())
-        # kl = torch.mul(kl, (attention.detach() > 0.8).float()).mean()
-        kl = kl.mean()
+        kl_original = (p_logvar - q_logvar) + (q_logvar.exp() + (q_mu - p_mu).pow(2)) / (p_logvar.exp()) - 1
+        kl = torch.mul(kl_original, ob_is_valid).mean()
         new_loss = self.mse_coef * reconstuct_mse + self.kl_coef * kl 
-
 
         self.optimizer.zero_grad()
         (value_loss * self.value_loss_coef + action_loss -

@@ -170,16 +170,20 @@ for j in range(num_updates_init, num_updates):
         # Obser reward and next obs
         obs, reward, done, infos = envs.step(action)
 
+        ob_is_valid = []
         for info in infos:
             if 'Episode_Total_Reward' in info.keys():
                 episode_rewards.append(info['Episode_Total_Reward'])
             if 'Episode_Total_Len' in info.keys():
                 episode_lengths.append(info['Episode_Total_Len'])
+            ob_is_valid.append([info['ob_is_valid']])
 
         # If done then clean the history of observations.
         masks = torch.FloatTensor([[0.0] if done_ else [1.0]
                                    for done_ in done])
-        rollouts.insert(obs, recurrent_hidden_states,
+        ob_is_valid = torch.FloatTensor(ob_is_valid)
+
+        rollouts.insert(obs, ob_is_valid, recurrent_hidden_states,
         p_recurrent_hidden_states, action, action_log_prob, value, reward, masks)
 
     
