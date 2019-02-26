@@ -65,7 +65,7 @@ class A2C_ACKTR():
 
         # mse & kl
         reconstuct_mse = F.mse_loss(ob_reconstructed, ob_original)
-        kl_original = (p_logvar - q_logvar) + (q_logvar.exp() + (q_mu - p_mu).pow(2)) / (1e-4 + p_logvar.exp()) - 1
+        kl_original = (p_logvar - q_logvar) + (q_logvar.exp() + (q_mu - p_mu).pow(2)) / (1e-5 + p_logvar.exp()) - 1
         kl = torch.mul(kl_original, ob_is_valid).mean()
         new_loss = self.mse_coef * reconstuct_mse + self.kl_coef * kl 
 
