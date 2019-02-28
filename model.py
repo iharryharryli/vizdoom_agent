@@ -171,6 +171,13 @@ class CNNBase(NNBase):
             init_linear_(nn.Linear(hidden_size, 1))
         )
 
+        self.policy_net = nn.Sequential(
+            init_(nn.Linear(hidden_size, hidden_size)),
+            nn.ReLU(),
+            init_(nn.Linear(hidden_size, hidden_size)),
+            nn.ReLU(),
+        )
+
         self.critic_linear = init_linear_(nn.Linear(hidden_size, 1))
 
         self.train()
@@ -182,6 +189,8 @@ class CNNBase(NNBase):
 
         if self.is_recurrent:
             x, rnn_hxs, attention = self._forward_gru(x, rnn_hxs, masks)
+
+        x = self.policy_net(x)
 
         return self.critic_linear(x), x, rnn_hxs, attention
 
