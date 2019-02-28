@@ -172,7 +172,7 @@ class CNNBase(NNBase):
         )
 
         self.policy_net = nn.Sequential(
-            init_(nn.Linear(hidden_size, hidden_size)),
+            init_(nn.Linear(32, hidden_size)),
             nn.ReLU(),
             init_(nn.Linear(hidden_size, hidden_size)),
             nn.ReLU(),
