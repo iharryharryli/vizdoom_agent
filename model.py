@@ -33,7 +33,6 @@ init4_ = lambda m: init(m,
     lambda x: nn.init.constant_(x, 0),
     nn.init.calculate_gain('sigmoid'))
 
-
 class Policy(nn.Module):
     def __init__(self, obs_shape, action_space, device, base_kwargs=None):
         super(Policy, self).__init__()
@@ -118,7 +117,9 @@ class NNBase(nn.Module):
             )
 
             self.p_mu = init2_(nn.Linear(hidden_size, hidden_size))
-            self.p_logvar = init2_(nn.Linear(hidden_size, hidden_size))
+            self.p_logvar = nn.Sequential(
+                init_(nn.Linear(hidden_size, hidden_size)),
+                nn.Softplus())
 
     @property
     def is_recurrent(self):
@@ -208,7 +209,9 @@ class CNNBase(NNBase):
         )
 
         self.q_mu = init2_(nn.Linear(hidden_size, hidden_size))
-        self.q_logvar = init2_(nn.Linear(hidden_size, hidden_size))
+        self.q_logvar = nn.Sequential(
+                init_(nn.Linear(hidden_size, hidden_size)),
+                nn.Softplus())
 
         self.attention = nn.Sequential(
             init_(nn.Conv2d(num_inputs, 32, 8, stride=4)),
