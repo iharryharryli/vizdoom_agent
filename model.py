@@ -103,41 +103,53 @@ class NNBase(nn.Module):
         return self._hidden_size
 
     def _forward_gru(self, x, hxs, masks):
-        if x.size(0) == hxs.size(0):
-            x = hxs = self.gru(x, hxs * masks)
-        else:
-            # x is a (T, N, -1) tensor that has been flatten to (T * N, -1)
-            N = hxs.size(0)
-            T = int(x.size(0) / N)
+        # x is a (T, N, -1) tensor that has been flatten to (T * N, -1)
+        N = hxs.size(0)
+        T = int(x.size(0) / N)
 
-            # unflatten
-            x = x.view(T, N, x.size(1))
+        # unflatten
+        x = x.view(T, N, x.size(1), x.size(2))
 
-            # Same deal with masks
-            masks = masks.view(T, N, 1)
+        # Same deal with masks
+        masks = masks.view(T, N, 1)
 
-            outputs = []
-            for i in range(T):
-                hx = hxs = self.gru(x[i], hxs * masks[i])
-                outputs.append(hx)
+        outputs = []
+        for i in range(T):
+            hidden_state = hxs * masks[i]
+            num_worker, num_annotation, _ = x[i].shape
+            
+            att_input = torch.cat((x[i], hidden_state.repeat(1, num_annotation).view(num_worker, num_annotation, -1)),
+                dim=2)
+            raw_attention = self.attention(att_input).view(num_worker, num_annotation)
+            attention = F.softmax(raw_attention, dim=-1)[:,:,None]
+            attended_x = torch.mul(x[i], attention)
 
-            # assert len(outputs) == T
-            # x is a (T, N, -1) tensor
-            x = torch.stack(outputs, dim=0)
-            # flatten
-            x = x.view(T * N, -1)
+            context = torch.sum(attended_x, dim=1)
+            
+            hx = hxs = self.gru(context, hidden_state)
+            outputs.append(hx)
+
+        # assert len(outputs) == T
+        # x is a (T, N, -1) tensor
+        x = torch.stack(outputs, dim=0)
+        # flatten
+        x = x.view(T * N, -1)
 
         return x, hxs
 
 
 class CNNBase(NNBase):
     def __init__(self, num_inputs, recurrent=False, hidden_size=512):
-        super(CNNBase, self).__init__(recurrent, hidden_size, hidden_size)
+        super(CNNBase, self).__init__(recurrent, 32, hidden_size)
 
         init_ = lambda m: init(m,
             nn.init.orthogonal_,
             lambda x: nn.init.constant_(x, 0),
             nn.init.calculate_gain('relu'))
+
+        init_linear_ = lambda m: init(m,
+            nn.init.orthogonal_,
+            lambda x: nn.init.constant_(x, 0))
 
         self.main = nn.Sequential(
             init_(nn.Conv2d(num_inputs, 32, 8, stride=4)),
@@ -146,21 +158,24 @@ class CNNBase(NNBase):
             nn.ReLU(),
             init_(nn.Conv2d(64, 32, 3, stride=1)),
             nn.ReLU(),
-            Flatten(),
-            init_(nn.Linear(32 * 7 * 7, hidden_size)),
-            nn.ReLU()
         )
 
-        init_ = lambda m: init(m,
-            nn.init.orthogonal_,
-            lambda x: nn.init.constant_(x, 0))
+        self.attention = nn.Sequential(
+            init_(nn.Linear(32 + hidden_size, hidden_size)),
+            nn.ReLU(),
+            init_(nn.Linear(hidden_size, hidden_size)),
+            nn.ReLU(),
+            init_linear_(nn.Linear(hidden_size, 1))
+        )
 
-        self.critic_linear = init_(nn.Linear(hidden_size, 1))
+        self.critic_linear = init_linear_(nn.Linear(hidden_size, 1))
 
         self.train()
 
     def forward(self, inputs, rnn_hxs, masks):
         x = self.main(inputs / 255.0)
+
+        x = x.view(x.size(0), x.size(1), -1).permute(0,2,1)
 
         if self.is_recurrent:
             x, rnn_hxs = self._forward_gru(x, rnn_hxs, masks)
