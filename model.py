@@ -46,7 +46,7 @@ class Policy(nn.Module):
         raise NotImplementedError
 
     def act(self, inputs, rnn_hxs, masks, deterministic=False):
-        value, actor_features, rnn_hxs = self.base(inputs, rnn_hxs, masks)
+        value, actor_features, rnn_hxs, attention = self.base(inputs, rnn_hxs, masks)
         dist = self.dist(actor_features)
 
         if deterministic:
@@ -57,14 +57,14 @@ class Policy(nn.Module):
         action_log_probs = dist.log_probs(action)
         dist_entropy = dist.entropy().mean()
 
-        return value, action, action_log_probs, rnn_hxs
+        return value, action, action_log_probs, rnn_hxs, attention
 
     def get_value(self, inputs, rnn_hxs, masks):
-        value, _, _ = self.base(inputs, rnn_hxs, masks)
+        value, _, _, _ = self.base(inputs, rnn_hxs, masks)
         return value
 
     def evaluate_actions(self, inputs, rnn_hxs, masks, action):
-        value, actor_features, rnn_hxs = self.base(inputs, rnn_hxs, masks)
+        value, actor_features, rnn_hxs, _ = self.base(inputs, rnn_hxs, masks)
         dist = self.dist(actor_features)
 
         action_log_probs = dist.log_probs(action)
@@ -114,6 +114,7 @@ class NNBase(nn.Module):
         masks = masks.view(T, N, 1)
 
         outputs = []
+        attention_acc = []
         for i in range(T):
             hidden_state = hxs * masks[i]
             num_worker, num_annotation, _ = x[i].shape
@@ -128,14 +129,16 @@ class NNBase(nn.Module):
             
             hx = hxs = self.gru(context, hidden_state)
             outputs.append(hx)
+            attention_acc.append(attention)
 
         # assert len(outputs) == T
         # x is a (T, N, -1) tensor
         x = torch.stack(outputs, dim=0)
+        attention_acc = torch.stack(attention_acc, dim=0)
         # flatten
         x = x.view(T * N, -1)
 
-        return x, hxs
+        return x, hxs, attention_acc
 
 
 class CNNBase(NNBase):
@@ -178,9 +181,9 @@ class CNNBase(NNBase):
         x = x.view(x.size(0), x.size(1), -1).permute(0,2,1)
 
         if self.is_recurrent:
-            x, rnn_hxs = self._forward_gru(x, rnn_hxs, masks)
+            x, rnn_hxs, attention = self._forward_gru(x, rnn_hxs, masks)
 
-        return self.critic_linear(x), x, rnn_hxs
+        return self.critic_linear(x), x, rnn_hxs, attention
 
 
 class MLPBase(NNBase):
