@@ -125,7 +125,7 @@ class NNBase(nn.Module):
             attention = F.softmax(raw_attention, dim=-1)[:,:,None]
             attended_x = torch.mul(x[i], attention)
 
-            context = torch.sum(attended_x, dim=1)
+            context = self.policy_net(torch.sum(attended_x, dim=1))
             
             hx = hxs = self.gru(context, hidden_state)
             outputs.append(hx)
@@ -189,8 +189,6 @@ class CNNBase(NNBase):
 
         if self.is_recurrent:
             x, rnn_hxs, attention = self._forward_gru(x, rnn_hxs, masks)
-
-        x = self.policy_net(x)
 
         return self.critic_linear(x), x, rnn_hxs, attention
 
