@@ -218,7 +218,7 @@ class CNNBase(NNBase):
             init_(nn.Conv2d(64, 32, 3, stride=1)),
             nn.ReLU(),
             Flatten(),
-            init4_(nn.Linear(32 * 7 * 7, hidden_size)),
+            init4_(nn.Linear(32 * 7 * 7, 1)),
             nn.Sigmoid()
         )
 
@@ -262,7 +262,7 @@ class CNNBase(NNBase):
         
         p_mu, p_logvar, p_rnn = self._forward_p_gru(q_mu, p_rnn, masks, prev_action_one_hot)
 
-        policy = self.policy_network(torch.mul(q_mu.detach(), attention) + torch.mul(p_mu.detach(), 1 - attention))
+        policy = self.policy_network(torch.mul(q_mu, attention) + torch.mul(p_mu, 1 - attention))
         policy, rnn = self._forward_gru(policy, rnn, masks)
 
         if is_training:
