@@ -124,8 +124,9 @@ class NNBase(nn.Module):
             raw_attention = self.attention(att_input).view(num_worker, num_annotation)
             attention = F.softmax(raw_attention, dim=-1)[:,:,None]
             attended_x = torch.mul(x[i], attention)
+            attention_beta = self.beta_attention(hidden_state)
 
-            context = self.policy_net(torch.sum(attended_x, dim=1))
+            context = self.policy_net(torch.mul(attention_beta, torch.sum(attended_x, dim=1)))
             
             hx = hxs = self.gru(context, hidden_state)
             outputs.append(hx)
@@ -154,6 +155,11 @@ class CNNBase(NNBase):
             nn.init.orthogonal_,
             lambda x: nn.init.constant_(x, 0))
 
+        init_sigmoid_ = lambda m: init(m,
+            nn.init.orthogonal_,
+            lambda x: nn.init.constant_(x, 0),
+            nn.init.calculate_gain('sigmoid'))
+
         self.main = nn.Sequential(
             init_(nn.Conv2d(num_inputs, 32, 8, stride=4)),
             nn.ReLU(),
@@ -170,6 +176,14 @@ class CNNBase(NNBase):
             nn.ReLU(),
             init_linear_(nn.Linear(hidden_size, 1))
         )
+
+        self.beta_attention = nn.Sequential(
+            init_(nn.Linear(hidden_size, hidden_size)),
+            nn.ReLU(),
+            init_sigmoid_(nn.Linear(hidden_size, 1)),
+            nn.Sigmoid(),
+        )
+
 
         self.policy_net = nn.Sequential(
             init_(nn.Linear(32, hidden_size)),
