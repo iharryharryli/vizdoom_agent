@@ -26,7 +26,7 @@ import json
 parser = argparse.ArgumentParser(description='RL', formatter_class=argparse.ArgumentDefaultsHelpFormatter)
 parser.add_argument('result_dir', type=str)
 parser.add_argument('--seed', type=int, default=1)
-parser.add_argument('--fps', type=int, default=120)
+parser.add_argument('--fps', type=int, default=60)
 
 
 # In[3]:
@@ -114,7 +114,7 @@ while True:
         if cur_action is None or cur_action_count == frame_repeat:
             cur_action_count = 0
             with torch.no_grad():
-                value, action, action_prob, recurrent_hidden_states, _ = actor_critic.act(
+                value, action, action_prob, recurrent_hidden_states = actor_critic.act(
                     torch.FloatTensor(obs[np.newaxis,:]), recurrent_hidden_states, masks, deterministic=False)
                 cur_action = action
 
