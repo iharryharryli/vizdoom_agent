@@ -159,12 +159,14 @@ class CNNBase(NNBase):
             nn.ReLU(),
             init_(nn.Conv2d(32, 64, 4, stride=2)),
             nn.ReLU(),
-            init_(nn.Conv2d(64, 32, 3, stride=1)),
+            init_(nn.Conv2d(64, 128, 3, stride=1)),
+            nn.ReLU(),
+            init_(nn.Conv2d(128, 256, 4, stride=1)),
             nn.ReLU(),
         )
 
         self.attention = nn.Sequential(
-            init_(nn.Linear(32 + hidden_size, hidden_size)),
+            init_(nn.Linear(256 + hidden_size, hidden_size)),
             nn.ReLU(),
             init_(nn.Linear(hidden_size, hidden_size)),
             nn.ReLU(),
@@ -172,7 +174,7 @@ class CNNBase(NNBase):
         )
 
         self.policy_net = nn.Sequential(
-            init_(nn.Linear(32, hidden_size)),
+            init_(nn.Linear(256, hidden_size)),
             nn.ReLU(),
             init_(nn.Linear(hidden_size, hidden_size)),
             nn.ReLU(),
