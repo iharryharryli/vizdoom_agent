@@ -144,7 +144,7 @@ class CNNBase(NNBase):
     def __init__(self, num_inputs, recurrent=False, hidden_size=512):
         num_attention = 2
         self.num_attention = num_attention
-        super(CNNBase, self).__init__(recurrent, 32 * num_attention, hidden_size)
+        super(CNNBase, self).__init__(recurrent, 256 * num_attention, hidden_size)
 
         init_ = lambda m: init(m,
             nn.init.orthogonal_,
@@ -156,16 +156,16 @@ class CNNBase(NNBase):
             lambda x: nn.init.constant_(x, 0))
 
         self.main = nn.Sequential(
-            init_(nn.Conv2d(num_inputs, 32, 8, stride=4)),
+            init_(nn.Conv2d(num_inputs, 64, 8, stride=4)),
             nn.ReLU(),
-            init_(nn.Conv2d(32, 64, 4, stride=2)),
+            init_(nn.Conv2d(64, 128, 4, stride=2)),
             nn.ReLU(),
-            init_(nn.Conv2d(64, 32, 3, stride=1)),
+            init_(nn.Conv2d(128, 256, 3, stride=1)),
             nn.ReLU(),
         )
 
         self.attention = nn.Sequential(
-            init_(nn.Linear(32 + hidden_size, hidden_size)),
+            init_(nn.Linear(256 + hidden_size, hidden_size)),
             nn.ReLU(),
             init_(nn.Linear(hidden_size, hidden_size)),
             nn.ReLU(),
