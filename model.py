@@ -121,11 +121,10 @@ class NNBase(nn.Module):
             
             att_input = torch.cat((x[i], hidden_state.repeat(1, num_annotation).view(num_worker, num_annotation, -1)),
                 dim=2)
-            raw_attention = self.attention(att_input).view(num_worker, num_annotation)
-            attention = F.softmax(raw_attention, dim=-1)[:,:,None]
-            attended_x = torch.mul(x[i], attention)
-
-            context = torch.sum(attended_x, dim=1)
+            raw_attention = self.attention(att_input)
+            attention = F.softmax(raw_attention, dim=1).unsqueeze(-1)
+            attended_x = torch.mul(x[i].unsqueeze(-2).repeat(1,1,self.num_attention,1), attention)
+            context = torch.sum(attended_x, dim=1).view(num_worker, -1)
             
             hx = hxs = self.gru(context, hidden_state)
             outputs.append(hx)
@@ -143,7 +142,9 @@ class NNBase(nn.Module):
 
 class CNNBase(NNBase):
     def __init__(self, num_inputs, recurrent=False, hidden_size=512):
-        super(CNNBase, self).__init__(recurrent, 32, hidden_size)
+        num_attention = 2
+        self.num_attention = num_attention
+        super(CNNBase, self).__init__(recurrent, 32 * num_attention, hidden_size)
 
         init_ = lambda m: init(m,
             nn.init.orthogonal_,
@@ -168,7 +169,7 @@ class CNNBase(NNBase):
             nn.ReLU(),
             init_(nn.Linear(hidden_size, hidden_size)),
             nn.ReLU(),
-            init_linear_(nn.Linear(hidden_size, 1))
+            init_linear_(nn.Linear(hidden_size, num_attention))
         )
 
         self.critic_linear = init_linear_(nn.Linear(hidden_size, 1))
