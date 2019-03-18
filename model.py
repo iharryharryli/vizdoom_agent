@@ -218,7 +218,7 @@ class CNNBase(NNBase):
             init_(nn.Conv2d(64, 32, 3, stride=1)),
             nn.ReLU(),
             Flatten(),
-            init4_(nn.Linear(32 * 7 * 7, 1)),
+            init4_(nn.Linear(32 * 7 * 7, hidden_size)),
             nn.Sigmoid()
         )
 

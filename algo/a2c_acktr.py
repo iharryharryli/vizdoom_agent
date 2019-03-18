@@ -64,10 +64,15 @@ class A2C_ACKTR():
         action_loss = -(advantages.detach() * action_log_probs).mean()
 
         # mse & kl
-        reconstuct_mse = F.mse_loss(ob_reconstructed, ob_original)
-        kl_original = (p_logvar - q_logvar) + (q_logvar.exp() + (q_mu - p_mu).pow(2)) / (p_logvar.exp()) - 1
-        kl = torch.mul(kl_original, ob_is_valid).mean()
+        reconstuct_mse = (ob_reconstructed - ob_original).pow(2)
+        reconstuct_mse = reconstuct_mse.view(reconstuct_mse.shape[0], -1)
+        reconstuct_mse = reconstuct_mse.mean(dim=-1, keepdim=True)     
+
+        kl = ((p_logvar - q_logvar) + (q_logvar.exp() + (q_mu - p_mu).pow(2)) / (p_logvar.exp()) - 1)
+        kl = kl.mean(dim=-1, keepdim=True)
+        
         new_loss = self.mse_coef * reconstuct_mse + self.kl_coef * kl 
+        new_loss = torch.mul(new_loss, ob_is_valid).mean()
 
         self.optimizer.zero_grad()
         (value_loss * self.value_loss_coef + action_loss -
@@ -80,4 +85,4 @@ class A2C_ACKTR():
         self.optimizer.step()
 
         return value_loss.item(), action_loss.item(), dist_entropy.item(), \
-            reconstuct_mse.item(), kl.item()
+            reconstuct_mse.mean().item(), kl.mean().item()
