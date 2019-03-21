@@ -142,8 +142,8 @@ class NNBase(nn.Module):
             q_mu = q_dist[:, : self.hidden_size]
 
             # Update GRU
-            f = self.f_gru(torch.cat([f * masks[i], c[i]], dim=1))
-            h = self.h_gru(torch.cat([h * masks[i], p_mu], dim=1))
+            f = self.f_gru(c[i], f * masks[i])
+            h = self.h_gru(p_mu, h * masks[i])
 
             # Save Output
             acc_p_dist.append(p_dist)
