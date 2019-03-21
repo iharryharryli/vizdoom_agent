@@ -261,6 +261,6 @@ class CNNBase(NNBase):
             # reconstruct
             ob_reconstructed = self.decoder(q_s)
             
-            return self.critic_linear(q_mu), q_mu, rnn_hxs, ob_original, ob_reconstructed, q_mu, q_logvar, p_mu, p_logvar
+            return self.critic_linear(q_s), q_s, rnn_hxs, ob_original, ob_reconstructed, q_mu, q_logvar, p_mu, p_logvar
         else:
-            return self.critic_linear(q_mu), q_mu, rnn_hxs
+            return self.critic_linear(q_s), q_s, rnn_hxs
