@@ -68,7 +68,7 @@ class Policy(nn.Module):
         return value
 
     def evaluate_actions(self, inputs, rnn_hxs, masks, prev_action_one_hot, action):
-        value, actor_features, rnn_hxs, ob_original, ob_reconstructed, mu, logvar, p_mu, p_logvar = self.base(inputs, 
+        value, actor_features, rnn_hxs, ob_original, ob_reconstructed, q_mu, q_logvar, p_mu, p_logvar = self.base(inputs, 
             rnn_hxs, masks, prev_action_one_hot, is_training=True)
         
         dist = self.dist(actor_features)
@@ -77,23 +77,29 @@ class Policy(nn.Module):
         dist_entropy = dist.entropy().mean()
 
         return value, action_log_probs, dist_entropy, rnn_hxs, ob_original, ob_reconstructed, \
-        mu, logvar, p_mu, p_logvar
+        q_mu, q_logvar, p_mu, p_logvar
 
 
 class NNBase(nn.Module):
 
-    def __init__(self, recurrent, recurrent_input_size, hidden_size):
+    def __init__(self, recurrent, hidden_size):
         super(NNBase, self).__init__()
 
-        self._hidden_size = hidden_size
+        self._hidden_size = hidden_size * 3
         self._recurrent = recurrent
 
-        if recurrent:
-            self.gru = nn.GRUCell(recurrent_input_size, hidden_size)
-            nn.init.orthogonal_(self.gru.weight_ih.data)
-            nn.init.orthogonal_(self.gru.weight_hh.data)
-            self.gru.bias_ih.data.fill_(0)
-            self.gru.bias_hh.data.fill_(0)
+        
+        self.h_gru = nn.GRUCell(2 * hidden_size, hidden_size)
+        nn.init.orthogonal_(self.h_gru.weight_ih.data)
+        nn.init.orthogonal_(self.h_gru.weight_hh.data)
+        self.h_gru.bias_ih.data.fill_(0)
+        self.h_gru.bias_hh.data.fill_(0)
+
+        self.f_gru = nn.GRUCell(2 * hidden_size, hidden_size)
+        nn.init.orthogonal_(self.f_gru.weight_ih.data)
+        nn.init.orthogonal_(self.f_gru.weight_hh.data)
+        self.f_gru.bias_ih.data.fill_(0)
+        self.f_gru.bias_hh.data.fill_(0)
 
     @property
     def is_recurrent(self):
@@ -101,48 +107,64 @@ class NNBase(nn.Module):
 
     @property
     def recurrent_hidden_state_size(self):
-        if self._recurrent:
-            return self._hidden_size
-        return 1
+        return self._hidden_size
 
     @property
     def output_size(self):
         #return self._hidden_size
         return self.hidden_size
 
-    def _forward_gru(self, x, hxs, masks, prev_action_one_hot):
-        if x.size(0) == hxs.size(0):
-            x2 = torch.cat((x, prev_action_one_hot * masks), dim=1)
-            x = hxs = self.gru(x2, hxs * masks)
-        else:
-            # x is a (T, N, -1) tensor that has been flatten to (T * N, -1)
-            N = hxs.size(0)
-            T = int(x.size(0) / N)
+    def _forward_gru(self, c, hxs, masks, prev_action_one_hot):    
+        # x is a (T, N, -1) tensor that has been flatten to (T * N, -1)
+        N = hxs.size(0)
+        T = int(c.size(0) / N)
+        # unflatten
+        c = c.view(T, N, c.size(1))
+        masks = masks.view(T, N, 1)
+        prev_action_one_hot = prev_action_one_hot.view(T, N, self.num_actions)
 
-            # unflatten
-            x = x.view(T, N, x.size(1))
+        f = hxs[:, : self.hidden_size]
+        h = hxs[:, self.hidden_size : 2 * self.hidden_size]
+        q_mu = hxs[:, 2 * self.hidden_size : ]
 
-            # Same deal with masks
-            masks = masks.view(T, N, 1)
+        acc_p_dist = []
+        acc_q_dist = []
 
-            outputs = []
-            for i in range(T):
-                x2 = torch.cat((x[i], prev_action_one_hot[i] * masks[i]), dim=1)
-                hx = hxs = self.gru(x2, hxs * masks[i])
-                outputs.append(hx)
+        for i in range(T):
+            # P
+            p_input = torch.cat([h, q_mu, prev_action_one_hot[i]], dim=1)
+            p_dist = self.p_network(p_input * masks[i])
+            p_mu = p_dist[:, : self.hidden_size]
 
-            # assert len(outputs) == T
-            # x is a (T, N, -1) tensor
-            x = torch.stack(outputs, dim=0)
-            # flatten
-            x = x.view(T * N, -1)
+            # Q
+            q_input = torch.cat([f, c[i], prev_action_one_hot[i]], dim=1)
+            q_dist = self.q_network(q_input * masks[i])
+            q_mu = q_dist[:, : self.hidden_size]
 
-        return x, hxs
+            # Update GRU
+            f = self.f_gru(torch.cat([f * masks[i], c[i]], dim=1))
+            h = self.h_gru(torch.cat([h * masks[i], p_mu], dim=1))
+
+            # Save Output
+            acc_p_dist.append(p_dist)
+            acc_q_dist.append(q_dist)
+
+        # assert len(outputs) == T
+        # x is a (T, N, -1) tensor
+        acc_p_dist = torch.stack(acc_p_dist, dim=0)
+        acc_q_dist = torch.stack(acc_q_dist, dim=0)
+        # flatten
+        acc_p_dist = acc_p_dist.view(T * N, -1)
+        acc_q_dist = acc_q_dist.view(T * N, -1)
+
+        hxs = torch.cat([f,h,q_mu], dim=1)
+
+        return acc_p_dist, acc_q_dist, hxs
 
 
 class CNNBase(NNBase):
     def __init__(self, num_inputs, num_actions, device, recurrent=False, hidden_size=512):
-        super(CNNBase, self).__init__(recurrent, hidden_size + num_actions, hidden_size)
+        super(CNNBase, self).__init__(recurrent, hidden_size)
 
         self.hidden_size = hidden_size
         self.num_actions = num_actions
@@ -152,6 +174,15 @@ class CNNBase(NNBase):
             nn.init.orthogonal_,
             lambda x: nn.init.constant_(x, 0),
             nn.init.calculate_gain('relu'))
+
+        init2_ = lambda m: init(m,
+            nn.init.orthogonal_,
+            lambda x: nn.init.constant_(x, 0))
+
+        init3_ = lambda m: init(m,
+            nn.init.orthogonal_,
+            lambda x: nn.init.constant_(x, 0),
+            nn.init.calculate_gain('sigmoid'))
 
         self.main = nn.Sequential(
             init_(nn.Conv2d(num_inputs, 32, 8, stride=4)),
@@ -163,11 +194,7 @@ class CNNBase(NNBase):
             Flatten(),
             init_(nn.Linear(32 * 7 * 7, hidden_size)),
             nn.ReLU()
-        )
-
-        init2_ = lambda m: init(m,
-            nn.init.orthogonal_,
-            lambda x: nn.init.constant_(x, 0))
+        )        
 
         self.critic_linear = init2_(nn.Linear(hidden_size, 1))
 
@@ -179,24 +206,26 @@ class CNNBase(NNBase):
             nn.ReLU(),
             init_(nn.ConvTranspose2d(64, 32, kernel_size=4, stride=2)),
             nn.ReLU(),
-            init_(nn.ConvTranspose2d(32, num_inputs, kernel_size=8, stride=4)),
+            init3_(nn.ConvTranspose2d(32, num_inputs, kernel_size=8, stride=4)),
             nn.Sigmoid()
         )
 
         dist_size = hidden_size * 2
 
         self.p_network = nn.Sequential(
-            init_(nn.Linear(hidden_size + num_actions, dist_size)),
+            init_(nn.Linear(hidden_size + hidden_size + num_actions, dist_size)),
             nn.ReLU(),
             init_(nn.Linear(dist_size, dist_size)),
-            nn.ReLU()
+            nn.ReLU(),
+            init2_(nn.Linear(dist_size, dist_size))
         )
 
-        self.var_network = nn.Sequential(
-            init_(nn.Linear(hidden_size, hidden_size)),
+        self.q_network = nn.Sequential(
+            init_(nn.Linear(hidden_size + hidden_size + num_actions, dist_size)),
             nn.ReLU(),
-            init_(nn.Linear(hidden_size, hidden_size)),
-            nn.ReLU()
+            init_(nn.Linear(dist_size, dist_size)),
+            nn.ReLU(),
+            init2_(nn.Linear(dist_size, dist_size))
         )
 
         self.train()
@@ -210,67 +239,21 @@ class CNNBase(NNBase):
 
     def forward(self, inputs, rnn_hxs, masks, prev_action_one_hot, is_training=False):
         ob_original = inputs / 255.0
-        rnn_hxs_original = rnn_hxs
 
-        x = self.main(ob_original)
+        c = self.main(ob_original)
         
-        mu, rnn_hxs = self._forward_gru(x, rnn_hxs, masks, prev_action_one_hot)
+        p_dist, q_dist, rnn_hxs = self._forward_gru(c, rnn_hxs, masks, prev_action_one_hot)
+
+        q_mu = q_dist[:, : self.hidden_size]
+        q_logvar = q_dist[:, self.hidden_size :]
+        p_mu = p_dist[:, : self.hidden_size]
+        p_logvar = p_dist[:, self.hidden_size :]
 
         if is_training:
-            logvar = self.var_network(mu)
-
             # reconstruct
-            z = self.reparameterize(mu, logvar)
+            z = self.reparameterize(q_mu, q_logvar)
             ob_reconstructed = self.decoder(z)
-
-            # p-network
-            prev_x = torch.cat((rnn_hxs_original, mu), dim=0)[:mu.shape[0]]
-            p_input = torch.cat((prev_x, prev_action_one_hot.view(-1, self.num_actions) * masks), dim=1)
-            p_output = self.p_network(p_input)
-            p_mu, p_logvar = torch.split(p_output, self.hidden_size, dim=1)
             
-            return self.critic_linear(mu), mu, rnn_hxs, ob_original, ob_reconstructed, mu, logvar, p_mu, p_logvar
+            return self.critic_linear(q_mu), q_mu, rnn_hxs, ob_original, ob_reconstructed, q_mu, q_logvar, p_mu, p_logvar
         else:
-            return self.critic_linear(mu), mu, rnn_hxs
-
-        
-
-class MLPBase(NNBase):
-    def __init__(self, num_inputs, recurrent=False, hidden_size=64):
-        super(MLPBase, self).__init__(recurrent, num_inputs, hidden_size)
-
-        if recurrent:
-            num_inputs = hidden_size
-
-        init_ = lambda m: init(m,
-            init_normc_,
-            lambda x: nn.init.constant_(x, 0))
-
-        self.actor = nn.Sequential(
-            init_(nn.Linear(num_inputs, hidden_size)),
-            nn.Tanh(),
-            init_(nn.Linear(hidden_size, hidden_size)),
-            nn.Tanh()
-        )
-
-        self.critic = nn.Sequential(
-            init_(nn.Linear(num_inputs, hidden_size)),
-            nn.Tanh(),
-            init_(nn.Linear(hidden_size, hidden_size)),
-            nn.Tanh()
-        )
-
-        self.critic_linear = init_(nn.Linear(hidden_size, 1))
-
-        self.train()
-
-    def forward(self, inputs, rnn_hxs, masks):
-        x = inputs
-
-        if self.is_recurrent:
-            x, rnn_hxs = self._forward_gru(x, rnn_hxs, masks)
-
-        hidden_critic = self.critic(x)
-        hidden_actor = self.actor(x)
-
-        return self.critic_linear(hidden_critic), hidden_actor, rnn_hxs
+            return self.critic_linear(q_mu), q_mu, rnn_hxs
