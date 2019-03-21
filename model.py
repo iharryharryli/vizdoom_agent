@@ -68,7 +68,7 @@ class Policy(nn.Module):
         return value
 
     def evaluate_actions(self, inputs, rnn_hxs, masks, prev_action_one_hot, action):
-        value, actor_features, rnn_hxs, ob_original, ob_reconstructed, q_mu, q_logvar, p_mu, p_logvar = self.base(inputs, 
+        value, actor_features, rnn_hxs, q_dist, p_dist = self.base(inputs, 
             rnn_hxs, masks, prev_action_one_hot, is_training=True)
         
         dist = self.dist(actor_features)
@@ -76,8 +76,8 @@ class Policy(nn.Module):
         action_log_probs = dist.log_probs(action)
         dist_entropy = dist.entropy().mean()
 
-        return value, action_log_probs, dist_entropy, rnn_hxs, ob_original, ob_reconstructed, \
-        q_mu, q_logvar, p_mu, p_logvar
+        return value, action_log_probs, dist_entropy, rnn_hxs, \
+        q_dist, p_dist
 
 
 class NNBase(nn.Module):
@@ -125,25 +125,23 @@ class NNBase(nn.Module):
 
         f = hxs[:, : self.hidden_size]
         h = hxs[:, self.hidden_size : 2 * self.hidden_size]
-        q_mu = hxs[:, 2 * self.hidden_size : ]
+        q_dist = hxs[:, 2 * self.hidden_size : ]
 
         acc_p_dist = []
         acc_q_dist = []
 
         for i in range(T):
             # P
-            p_input = torch.cat([h, q_mu, prev_action_one_hot[i]], dim=1)
+            p_input = torch.cat([h, q_dist, prev_action_one_hot[i]], dim=1)
             p_dist = self.p_network(p_input * masks[i])
-            p_mu = p_dist[:, : self.hidden_size]
 
             # Q
             q_input = torch.cat([f, c[i], prev_action_one_hot[i]], dim=1)
             q_dist = self.q_network(q_input * masks[i])
-            q_mu = q_dist[:, : self.hidden_size]
 
             # Update GRU
             f = self.f_gru(torch.cat([f * masks[i], c[i]], dim=1))
-            h = self.h_gru(torch.cat([h * masks[i], p_mu], dim=1))
+            h = self.h_gru(torch.cat([h * masks[i], p_dist], dim=1))
 
             # Save Output
             acc_p_dist.append(p_dist)
@@ -157,7 +155,7 @@ class NNBase(nn.Module):
         acc_p_dist = acc_p_dist.view(T * N, -1)
         acc_q_dist = acc_q_dist.view(T * N, -1)
 
-        hxs = torch.cat([f,h,q_mu], dim=1)
+        hxs = torch.cat([f,h,q_dist], dim=1)
 
         return acc_p_dist, acc_q_dist, hxs
 
@@ -198,34 +196,20 @@ class CNNBase(NNBase):
 
         self.critic_linear = init2_(nn.Linear(hidden_size, 1))
 
-        self.decoder = nn.Sequential(
-            init_(nn.Linear(hidden_size, 32 * 7 * 7)),
-            nn.ReLU(),
-            UnFlatten(),
-            init_(nn.ConvTranspose2d(32, 64, kernel_size=3, stride=1)),
-            nn.ReLU(),
-            init_(nn.ConvTranspose2d(64, 32, kernel_size=4, stride=2)),
-            nn.ReLU(),
-            init3_(nn.ConvTranspose2d(32, num_inputs, kernel_size=8, stride=4)),
-            nn.Sigmoid()
-        )
-
-        dist_size = hidden_size * 2
-
         self.p_network = nn.Sequential(
-            init_(nn.Linear(hidden_size + hidden_size + num_actions, dist_size)),
+            init_(nn.Linear(hidden_size + hidden_size + num_actions, hidden_size)),
             nn.ReLU(),
-            init_(nn.Linear(dist_size, dist_size)),
+            init_(nn.Linear(hidden_size, hidden_size)),
             nn.ReLU(),
-            init2_(nn.Linear(dist_size, dist_size))
+            init2_(nn.Linear(hidden_size, hidden_size))
         )
 
         self.q_network = nn.Sequential(
-            init_(nn.Linear(hidden_size + hidden_size + num_actions, dist_size)),
+            init_(nn.Linear(hidden_size + hidden_size + num_actions, hidden_size)),
             nn.ReLU(),
-            init_(nn.Linear(dist_size, dist_size)),
+            init_(nn.Linear(hidden_size, hidden_size)),
             nn.ReLU(),
-            init2_(nn.Linear(dist_size, dist_size))
+            init2_(nn.Linear(hidden_size, hidden_size))
         )
 
         self.train()
@@ -244,16 +228,7 @@ class CNNBase(NNBase):
         
         p_dist, q_dist, rnn_hxs = self._forward_gru(c, rnn_hxs, masks, prev_action_one_hot)
 
-        q_mu = q_dist[:, : self.hidden_size]
-        q_logvar = q_dist[:, self.hidden_size :]
-        p_mu = p_dist[:, : self.hidden_size]
-        p_logvar = p_dist[:, self.hidden_size :]
-
         if is_training:
-            # reconstruct
-            z = self.reparameterize(q_mu, q_logvar)
-            ob_reconstructed = self.decoder(z)
-            
-            return self.critic_linear(q_mu), q_mu, rnn_hxs, ob_original, ob_reconstructed, q_mu, q_logvar, p_mu, p_logvar
+            return self.critic_linear(q_dist), q_dist, rnn_hxs, q_dist, p_dist
         else:
-            return self.critic_linear(q_mu), q_mu, rnn_hxs
+            return self.critic_linear(q_dist), q_dist, rnn_hxs
