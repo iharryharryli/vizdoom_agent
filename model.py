@@ -89,13 +89,13 @@ class NNBase(nn.Module):
         self._recurrent = recurrent
 
         
-        self.h_gru = nn.GRUCell(2 * hidden_size, hidden_size)
+        self.h_gru = nn.GRUCell(hidden_size, hidden_size)
         nn.init.orthogonal_(self.h_gru.weight_ih.data)
         nn.init.orthogonal_(self.h_gru.weight_hh.data)
         self.h_gru.bias_ih.data.fill_(0)
         self.h_gru.bias_hh.data.fill_(0)
 
-        self.f_gru = nn.GRUCell(2 * hidden_size, hidden_size)
+        self.f_gru = nn.GRUCell(hidden_size, hidden_size)
         nn.init.orthogonal_(self.f_gru.weight_ih.data)
         nn.init.orthogonal_(self.f_gru.weight_hh.data)
         self.f_gru.bias_ih.data.fill_(0)
