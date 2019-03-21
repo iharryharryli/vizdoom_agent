@@ -89,13 +89,13 @@ class NNBase(nn.Module):
         self._recurrent = recurrent
 
         
-        self.h_gru = nn.GRUCell(2 * hidden_size, hidden_size)
+        self.h_gru = nn.GRUCell(hidden_size, hidden_size)
         nn.init.orthogonal_(self.h_gru.weight_ih.data)
         nn.init.orthogonal_(self.h_gru.weight_hh.data)
         self.h_gru.bias_ih.data.fill_(0)
         self.h_gru.bias_hh.data.fill_(0)
 
-        self.f_gru = nn.GRUCell(2 * hidden_size, hidden_size)
+        self.f_gru = nn.GRUCell(hidden_size, hidden_size)
         nn.init.orthogonal_(self.f_gru.weight_ih.data)
         nn.init.orthogonal_(self.f_gru.weight_hh.data)
         self.f_gru.bias_ih.data.fill_(0)
@@ -140,8 +140,8 @@ class NNBase(nn.Module):
             q_dist = self.q_network(q_input * masks[i])
 
             # Update GRU
-            f = self.f_gru(torch.cat([f * masks[i], c[i]], dim=1))
-            h = self.h_gru(torch.cat([h * masks[i], p_dist], dim=1))
+            f = self.f_gru(c[i], f * masks[i])
+            h = self.h_gru(p_dist, h * masks[i])
 
             # Save Output
             acc_p_dist.append(p_dist)
