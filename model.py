@@ -165,7 +165,7 @@ class NNBase(nn.Module):
         acc_q_dist = acc_q_dist.view(T * N, -1)
         acc_q_s = acc_q_s.view(T * N, -1)
 
-        hxs = torch.cat([f,h,q_mu], dim=1)
+        hxs = torch.cat([f,h,q_s], dim=1)
 
         return acc_p_dist, acc_q_dist, acc_q_s, hxs
 
