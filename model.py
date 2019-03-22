@@ -85,11 +85,11 @@ class NNBase(nn.Module):
     def __init__(self, recurrent, hidden_size):
         super(NNBase, self).__init__()
 
-        self._hidden_size = hidden_size * 3
+        self._hidden_size = hidden_size * 4
         self._recurrent = recurrent
 
         
-        self.h_gru = nn.GRUCell(hidden_size, hidden_size)
+        self.h_gru = nn.GRUCell(2 * hidden_size, hidden_size)
         nn.init.orthogonal_(self.h_gru.weight_ih.data)
         nn.init.orthogonal_(self.h_gru.weight_hh.data)
         self.h_gru.bias_ih.data.fill_(0)
@@ -112,7 +112,7 @@ class NNBase(nn.Module):
     @property
     def output_size(self):
         #return self._hidden_size
-        return self.hidden_size
+        return self.hidden_size * 2
 
     def _forward_gru(self, c, hxs, masks, prev_action_one_hot):    
         # x is a (T, N, -1) tensor that has been flatten to (T * N, -1)
@@ -125,25 +125,23 @@ class NNBase(nn.Module):
 
         f = hxs[:, : self.hidden_size]
         h = hxs[:, self.hidden_size : 2 * self.hidden_size]
-        q_mu = hxs[:, 2 * self.hidden_size : ]
+        q_dist = hxs[:, 2 * self.hidden_size : ]
 
         acc_p_dist = []
         acc_q_dist = []
 
         for i in range(T):
             # P
-            p_input = torch.cat([h, q_mu, prev_action_one_hot[i]], dim=1)
+            p_input = torch.cat([h, q_dist, prev_action_one_hot[i]], dim=1)
             p_dist = self.p_network(p_input * masks[i])
-            p_mu = p_dist[:, : self.hidden_size]
 
             # Q
             q_input = torch.cat([f, c[i], prev_action_one_hot[i]], dim=1)
             q_dist = self.q_network(q_input * masks[i])
-            q_mu = q_dist[:, : self.hidden_size]
 
             # Update GRU
             f = self.f_gru(c[i], f * masks[i])
-            h = self.h_gru(p_mu, h * masks[i])
+            h = self.h_gru(p_dist, h * masks[i])
 
             # Save Output
             acc_p_dist.append(p_dist)
@@ -157,7 +155,7 @@ class NNBase(nn.Module):
         acc_p_dist = acc_p_dist.view(T * N, -1)
         acc_q_dist = acc_q_dist.view(T * N, -1)
 
-        hxs = torch.cat([f,h,q_mu], dim=1)
+        hxs = torch.cat([f,h,q_dist], dim=1)
 
         return acc_p_dist, acc_q_dist, hxs
 
@@ -196,7 +194,7 @@ class CNNBase(NNBase):
             nn.ReLU()
         )        
 
-        self.critic_linear = init2_(nn.Linear(hidden_size, 1))
+        self.critic_linear = init2_(nn.Linear(2 * hidden_size, 1))
 
         self.decoder = nn.Sequential(
             init_(nn.Linear(hidden_size, 32 * 7 * 7)),
@@ -213,7 +211,7 @@ class CNNBase(NNBase):
         dist_size = hidden_size * 2
 
         self.p_network = nn.Sequential(
-            init_(nn.Linear(hidden_size + hidden_size + num_actions, dist_size)),
+            init_(nn.Linear(hidden_size + hidden_size * 2 + num_actions, dist_size)),
             nn.ReLU(),
             init_(nn.Linear(dist_size, dist_size)),
             nn.ReLU(),
@@ -244,16 +242,15 @@ class CNNBase(NNBase):
         
         p_dist, q_dist, rnn_hxs = self._forward_gru(c, rnn_hxs, masks, prev_action_one_hot)
 
-        q_mu = q_dist[:, : self.hidden_size]
-        q_logvar = q_dist[:, self.hidden_size :]
-        p_mu = p_dist[:, : self.hidden_size]
-        p_logvar = p_dist[:, self.hidden_size :]
-
         if is_training:
+            q_mu = q_dist[:, : self.hidden_size]
+            q_logvar = q_dist[:, self.hidden_size :]
+            p_mu = p_dist[:, : self.hidden_size]
+            p_logvar = p_dist[:, self.hidden_size :]
             # reconstruct
             z = self.reparameterize(q_mu, q_logvar)
             ob_reconstructed = self.decoder(z)
             
-            return self.critic_linear(q_mu), q_mu, rnn_hxs, ob_original, ob_reconstructed, q_mu, q_logvar, p_mu, p_logvar
+            return self.critic_linear(q_dist), q_dist, rnn_hxs, ob_original, ob_reconstructed, q_mu, q_logvar, p_mu, p_logvar
         else:
-            return self.critic_linear(q_mu), q_mu, rnn_hxs
+            return self.critic_linear(q_dist), q_dist, rnn_hxs
