@@ -114,7 +114,7 @@ class NNBase(nn.Module):
         #return self._hidden_size
         return self.hidden_size
 
-    def _forward_gru(self, c, hxs, masks, prev_action_one_hot, esp):    
+    def _forward_gru(self, c, hxs, masks, prev_action_one_hot, esp):   
         # x is a (T, N, -1) tensor that has been flatten to (T * N, -1)
         N = hxs.size(0)
         T = int(c.size(0) / N)
@@ -122,6 +122,7 @@ class NNBase(nn.Module):
         c = c.view(T, N, c.size(1))
         masks = masks.view(T, N, 1)
         prev_action_one_hot = prev_action_one_hot.view(T, N, self.num_actions)
+        esp = esp.view(T, N, -1)
 
         f = hxs[:, : self.hidden_size]
         h = hxs[:, self.hidden_size : 2 * self.hidden_size]
