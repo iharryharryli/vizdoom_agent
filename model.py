@@ -49,8 +49,8 @@ class Policy(nn.Module):
     def forward(self, inputs, rnn_hxs, masks):
         raise NotImplementedError
 
-    def act(self, inputs, rnn_hxs, masks, prev_action_one_hot, deterministic=False):
-        value, actor_features, rnn_hxs = self.base(inputs, rnn_hxs, masks, prev_action_one_hot)
+    def act(self, inputs, rnn_hxs, masks, prev_action_one_hot, esp, deterministic=False):
+        value, actor_features, rnn_hxs = self.base(inputs, rnn_hxs, masks, prev_action_one_hot, esp)
         dist = self.dist(actor_features)
 
         if deterministic:
@@ -63,13 +63,13 @@ class Policy(nn.Module):
 
         return value, action, action_log_probs, rnn_hxs
 
-    def get_value(self, inputs, rnn_hxs, masks, prev_action_one_hot):
-        value, _, _ = self.base(inputs, rnn_hxs, masks, prev_action_one_hot)
+    def get_value(self, inputs, rnn_hxs, masks, prev_action_one_hot, esp):
+        value, _, _ = self.base(inputs, rnn_hxs, masks, prev_action_one_hot, esp)
         return value
 
-    def evaluate_actions(self, inputs, rnn_hxs, masks, prev_action_one_hot, action):
+    def evaluate_actions(self, inputs, rnn_hxs, masks, prev_action_one_hot, action, esp):
         value, actor_features, rnn_hxs, ob_original, ob_reconstructed, q_mu, q_logvar, p_mu, p_logvar = self.base(inputs, 
-            rnn_hxs, masks, prev_action_one_hot, is_training=True)
+            rnn_hxs, masks, prev_action_one_hot, esp, is_training=True)
         
         dist = self.dist(actor_features)
 
@@ -114,7 +114,7 @@ class NNBase(nn.Module):
         #return self._hidden_size
         return self.hidden_size
 
-    def _forward_gru(self, c, hxs, masks, prev_action_one_hot):    
+    def _forward_gru(self, c, hxs, masks, prev_action_one_hot, esp):    
         # x is a (T, N, -1) tensor that has been flatten to (T * N, -1)
         N = hxs.size(0)
         T = int(c.size(0) / N)
@@ -137,14 +137,14 @@ class NNBase(nn.Module):
             p_dist = self.p_network(p_input * masks[i])
             p_mu = p_dist[:, : self.hidden_size]
             p_logvar = p_dist[:, self.hidden_size :]
-            p_s = self.reparameterize(p_mu, p_logvar)
+            p_s = self.sample(p_mu, p_logvar, esp[i])
 
             # Q
             q_input = torch.cat([f, c[i], prev_action_one_hot[i]], dim=1)
             q_dist = self.q_network(q_input * masks[i])
             q_mu = q_dist[:, : self.hidden_size]
             q_logvar = q_dist[:, self.hidden_size :]
-            q_s = self.reparameterize(q_mu, q_logvar)
+            q_s = self.sample(q_mu, q_logvar, esp[i])
 
             # Update GRU
             f = self.f_gru(c[i], f * masks[i])
@@ -238,19 +238,17 @@ class CNNBase(NNBase):
 
         self.train()
 
-    def reparameterize(self, mu, logvar):
+    def sample(self, mu, logvar, esp):
         std = logvar.mul(0.5).exp()
-        # return torch.normal(mu, std)
-        esp = torch.randn(*mu.size(), device=self.device)
         z = mu + std * esp
         return z
 
-    def forward(self, inputs, rnn_hxs, masks, prev_action_one_hot, is_training=False):
+    def forward(self, inputs, rnn_hxs, masks, prev_action_one_hot, esp, is_training=False):
         ob_original = inputs / 255.0
 
         c = self.main(ob_original)
         
-        p_dist, q_dist, q_s, rnn_hxs = self._forward_gru(c, rnn_hxs, masks, prev_action_one_hot)
+        p_dist, q_dist, q_s, rnn_hxs = self._forward_gru(c, rnn_hxs, masks, prev_action_one_hot, esp)
 
         q_mu = q_dist[:, : self.hidden_size]
         q_logvar = q_dist[:, self.hidden_size :]

@@ -51,7 +51,8 @@ class A2C_ACKTR():
                 rollouts.recurrent_hidden_states[0].view(-1, self.actor_critic.recurrent_hidden_state_size),
                 rollouts.masks[:-1].view(-1, 1),
                 rollouts.prev_action_one_hot[:-1].view(-1, action_shape),
-                rollouts.actions.view(-1, action_shape))
+                rollouts.actions.view(-1, action_shape),
+                rollouts.esp)
 
         values = values.view(num_steps, num_processes, 1)
         action_log_probs = action_log_probs.view(num_steps, num_processes, 1)
