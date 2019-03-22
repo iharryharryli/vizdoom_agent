@@ -18,6 +18,7 @@ import saves as save_file_names
 import argparse
 
 import json
+import storage
 
 
 # In[2]:
@@ -26,7 +27,7 @@ import json
 parser = argparse.ArgumentParser(description='RL', formatter_class=argparse.ArgumentDefaultsHelpFormatter)
 parser.add_argument('result_dir', type=str)
 parser.add_argument('--seed', type=int, default=1)
-parser.add_argument('--fps', type=int, default=60)
+parser.add_argument('--fps', type=int, default=90)
 
 
 # In[3]:
@@ -49,8 +50,6 @@ model_params = json.load(open(model_params))
 env_params = os.path.join(result_dir, save_file_names.env_parameter_save_file)
 env_params = json.load(open(env_params))
 env_params['render'] = True
-frame_repeat = env_params['frame_skip'] + 1
-env_params['frame_skip'] = 1
 
 MODEL_SAVE_PATH = os.path.join(result_dir, save_file_names.MODEL_SAVE_PATH_file)
 
@@ -85,7 +84,7 @@ if "recurrent_policy" in model_params:
 # In[10]:
 
 
-actor_critic = Policy(env.observation_space.shape, env.action_space,
+actor_critic = Policy(env.observation_space.shape, env.action_space, device,
     base_kwargs={'recurrent': recurrent_policy})
 actor_critic.to(device)
 actor_critic.load_state_dict(torch.load(MODEL_SAVE_PATH, map_location='cpu'))
@@ -94,9 +93,9 @@ actor_critic.load_state_dict(torch.load(MODEL_SAVE_PATH, map_location='cpu'))
 # In[11]:
 
 
-recurrent_hidden_states = None
-if recurrent_policy:
-    recurrent_hidden_states = torch.zeros(1, actor_critic.recurrent_hidden_state_size)
+recurrent_hidden_states = torch.zeros(1, actor_critic.recurrent_hidden_state_size)
+prev_action_one_hot = torch.zeros(1, env.action_space.n)
+
 
 
 # In[ ]:
@@ -107,23 +106,20 @@ while True:
     done = False
     masks = torch.zeros(1, 1)
     
-    cur_action = None
-    cur_action_count = 0
     
     while not done:
-        if cur_action is None or cur_action_count == frame_repeat:
-            cur_action_count = 0
-            with torch.no_grad():
-                value, action, action_prob, recurrent_hidden_states = actor_critic.act(
-                    torch.FloatTensor(obs[np.newaxis,:]), recurrent_hidden_states, masks, deterministic=False)
-                cur_action = action
+        with torch.no_grad():
+            value, action, action_prob, recurrent_hidden_states = actor_critic.act(
+                torch.FloatTensor(obs[np.newaxis,:]), recurrent_hidden_states, masks, 
+                prev_action_one_hot, deterministic=False)
+            cur_action = action
+            prev_action_one_hot = storage.actions_to_one_hot(action, env.action_space.n)
 
         obs, reward, done, info = env.step(action)
-        cur_action_count += 1
 
         masks.fill_(0.0 if done else 1.0)
 
-        sleep(1.0/args.fps)
+        sleep(1.0/(args.fps))
 
     print(info)
 
