@@ -153,7 +153,7 @@ else:
         "last_saved_num_updates": 0
     }
 
-esp_default = torch.zeros(parameters['num_processes'], actor_critic.base.hidden_size)
+esp_default = torch.zeros(parameters['num_processes'], actor_critic.base.hidden_size, device=device)
 
 for j in range(num_updates_init, num_updates):
     for step in range(parameters['num_steps']):
