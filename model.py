@@ -161,7 +161,7 @@ class NNBase(nn.Module):
 
 
 class CNNBase(NNBase):
-    def __init__(self, num_inputs, num_actions, device, recurrent=False, hidden_size=512):
+    def __init__(self, num_inputs, num_actions, device, recurrent=False, hidden_size=128):
         super(CNNBase, self).__init__(recurrent, hidden_size)
 
         self.hidden_size = hidden_size
