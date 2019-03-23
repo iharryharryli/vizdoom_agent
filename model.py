@@ -242,6 +242,13 @@ class CNNBase(NNBase):
             init2_(nn.Linear(dist_size, dist_size))
         )
 
+        self.policy_network = nn.Sequential(
+            init_(nn.Linear(hidden_size, hidden_size)),
+            nn.ReLU(),
+            init_(nn.Linear(hidden_size, hidden_size)),
+            nn.ReLU(),
+        )
+
         self.train()
 
     def reparameterize(self, mu, logvar):
@@ -258,12 +265,12 @@ class CNNBase(NNBase):
         
         _, _, q_s, rnn_hxs = self._forward_gru(c, rnn_hxs, masks, prev_action_one_hot, False)
 
-        a2c_value = self.critic_linear(q_s)
-        a2c_action = q_s
+        a2c_policy = self.policy_network(q_s)
+        a2c_value = self.critic_linear(a2c_policy)
 
         if is_training:
             # sample
-            p_dist, q_dist, q_s, rnn_hxs = self._forward_gru(c, rnn_hxs, masks, prev_action_one_hot, True)
+            p_dist, q_dist, q_s, _ = self._forward_gru(c, rnn_hxs, masks, prev_action_one_hot, True)
             q_mu = q_dist[:, : self.hidden_size]
             q_logvar = q_dist[:, self.hidden_size :]
             p_mu = p_dist[:, : self.hidden_size]
@@ -272,6 +279,6 @@ class CNNBase(NNBase):
             # reconstruct
             ob_reconstructed = self.decoder(q_s)
             
-            return a2c_value, a2c_action, rnn_hxs, ob_original, ob_reconstructed, q_mu, q_logvar, p_mu, p_logvar
+            return a2c_value, a2c_policy, None, ob_original, ob_reconstructed, q_mu, q_logvar, p_mu, p_logvar
         else:
-            return a2c_value, a2c_action, rnn_hxs
+            return a2c_value, a2c_policy, rnn_hxs
