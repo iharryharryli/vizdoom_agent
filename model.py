@@ -240,6 +240,13 @@ class CNNBase(NNBase):
             init2_(nn.Linear(dist_size, dist_size))
         )
 
+        self.policy_network = nn.Sequential(
+            init_(nn.Linear(hidden_size, hidden_size)),
+            nn.ReLU(),
+            init_(nn.Linear(hidden_size, hidden_size)),
+            nn.ReLU(),
+        )
+
         self.train()
 
     def reparameterize(self, mu, logvar):
@@ -261,10 +268,12 @@ class CNNBase(NNBase):
         p_mu = p_dist[:, : self.hidden_size]
         p_logvar = p_dist[:, self.hidden_size :]
 
+        policy = self.policy_network(q_s)
+
         if is_training:
             # reconstruct
             ob_reconstructed = self.decoder(q_s)
             
-            return self.critic_linear(q_s), q_s, rnn_hxs, ob_original, ob_reconstructed, q_mu, q_logvar, p_mu, p_logvar
+            return self.critic_linear(policy), policy, rnn_hxs, ob_original, ob_reconstructed, q_mu, q_logvar, p_mu, p_logvar
         else:
-            return self.critic_linear(q_s), q_s, rnn_hxs
+            return self.critic_linear(policy), policy, rnn_hxs
