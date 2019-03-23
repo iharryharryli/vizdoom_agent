@@ -114,7 +114,7 @@ class NNBase(nn.Module):
         #return self._hidden_size
         return self.hidden_size
 
-    def _forward_gru(self, c, hxs, masks, prev_action_one_hot, is_training):    
+    def _forward_gru(self, c, hxs, masks, prev_action_one_hot, should_sample):    
         # x is a (T, N, -1) tensor that has been flatten to (T * N, -1)
         N = hxs.size(0)
         T = int(c.size(0) / N)
@@ -137,18 +137,20 @@ class NNBase(nn.Module):
             p_dist = self.p_network(p_input * masks[i])
             p_mu = p_dist[:, : self.hidden_size]
             p_logvar = p_dist[:, self.hidden_size :]
-            p_s = p_mu
-            if is_training:
-                p_s = self.reparameterize(p_mu, p_logvar)
-
+                
             # Q
             q_input = torch.cat([f, c[i], prev_action_one_hot[i]], dim=1)
             q_dist = self.q_network(q_input * masks[i])
             q_mu = q_dist[:, : self.hidden_size]
             q_logvar = q_dist[:, self.hidden_size :]
-            q_s = q_mu
-            if is_training:
+
+            # Determine State
+            if should_sample:
+                p_s = self.reparameterize(p_mu, p_logvar)
                 q_s = self.reparameterize(q_mu, q_logvar)
+            else:
+                p_s = p_mu
+                q_s = q_mu
 
             # Update GRU
             f = self.f_gru(c[i], f * masks[i])
@@ -254,18 +256,22 @@ class CNNBase(NNBase):
 
         c = self.main(ob_original)
         
-        p_dist, q_dist, _, rnn_hxs = self._forward_gru(c, rnn_hxs, masks, prev_action_one_hot, False)
+        _, _, q_s, rnn_hxs = self._forward_gru(c, rnn_hxs, masks, prev_action_one_hot, False)
 
-        q_mu = q_dist[:, : self.hidden_size]
-        q_logvar = q_dist[:, self.hidden_size :]
-        p_mu = p_dist[:, : self.hidden_size]
-        p_logvar = p_dist[:, self.hidden_size :]
+        a2c_value = self.critic_linear(q_s)
+        a2c_action = q_s
 
         if is_training:
+            # sample
+            p_dist, q_dist, q_s, rnn_hxs = self._forward_gru(c, rnn_hxs, masks, prev_action_one_hot, True)
+            q_mu = q_dist[:, : self.hidden_size]
+            q_logvar = q_dist[:, self.hidden_size :]
+            p_mu = p_dist[:, : self.hidden_size]
+            p_logvar = p_dist[:, self.hidden_size :]
+
             # reconstruct
-            q_s = self.reparameterize(q_mu, q_logvar)
             ob_reconstructed = self.decoder(q_s)
             
-            return self.critic_linear(q_s), q_s, rnn_hxs, ob_original, ob_reconstructed, q_mu, q_logvar, p_mu, p_logvar
+            return a2c_value, a2c_action, rnn_hxs, ob_original, ob_reconstructed, q_mu, q_logvar, p_mu, p_logvar
         else:
-            return self.critic_linear(q_mu), q_mu, rnn_hxs
+            return a2c_value, a2c_action, rnn_hxs
