@@ -263,9 +263,9 @@ class CNNBase(NNBase):
 
         c = self.main(ob_original)
         
-        _, _, q_s, rnn_hxs = self._forward_gru(c, rnn_hxs, masks, prev_action_one_hot, False)
+        _, _, a2c_q_s, new_rnn_hxs = self._forward_gru(c, rnn_hxs, masks, prev_action_one_hot, False)
 
-        a2c_policy = self.policy_network(q_s)
+        a2c_policy = self.policy_network(a2c_q_s)
         a2c_value = self.critic_linear(a2c_policy)
 
         if is_training:
@@ -279,6 +279,6 @@ class CNNBase(NNBase):
             # reconstruct
             ob_reconstructed = self.decoder(q_s)
             
-            return a2c_value, a2c_policy, None, ob_original, ob_reconstructed, q_mu, q_logvar, p_mu, p_logvar
+            return a2c_value, a2c_policy, new_rnn_hxs, ob_original, ob_reconstructed, q_mu, q_logvar, p_mu, p_logvar
         else:
-            return a2c_value, a2c_policy, rnn_hxs
+            return a2c_value, a2c_policy, new_rnn_hxs
