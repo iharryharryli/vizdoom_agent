@@ -96,8 +96,8 @@ actor_critic.load_state_dict(torch.load(MODEL_SAVE_PATH, map_location=device))
 # In[11]:
 
 
-recurrent_hidden_states = torch.zeros(1, actor_critic.recurrent_hidden_state_size)
-prev_action_one_hot = torch.zeros(1, env.action_space.n)
+recurrent_hidden_states = torch.zeros(1, actor_critic.recurrent_hidden_state_size).to(device)
+prev_action_one_hot = torch.zeros(1, env.action_space.n).to(device)
 
 recent_count = 100
 episode_rewards = deque(maxlen=recent_count)
@@ -109,16 +109,16 @@ episode_lengths = deque(maxlen=recent_count)
 while True:
     obs = env.reset()
     done = False
-    masks = torch.zeros(1, 1)
+    masks = torch.zeros(1, 1).to(device)
     
     
     while not done:
         with torch.no_grad():
             value, action, action_prob, recurrent_hidden_states = actor_critic.act(
-                torch.FloatTensor(obs[np.newaxis,:]), recurrent_hidden_states, masks, 
+                torch.FloatTensor(obs[np.newaxis,:]).to(device), recurrent_hidden_states, masks, 
                 prev_action_one_hot, deterministic=False)
             cur_action = action
-            prev_action_one_hot = storage.actions_to_one_hot(action, env.action_space.n)
+            prev_action_one_hot = storage.actions_to_one_hot(action, env.action_space.n).to(device)
 
         obs, reward, done, info = env.step(action)
 
