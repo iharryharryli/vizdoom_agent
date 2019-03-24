@@ -66,7 +66,7 @@ env_params
 # In[7]:
 
 
-cuda = True
+cuda = torch.cuda.is_available()
 device = torch.device("cuda:0" if cuda else "cpu")
 
 
