@@ -66,7 +66,7 @@ env_params
 # In[7]:
 
 
-cuda = False
+cuda = True
 device = torch.device("cuda:0" if cuda else "cpu")
 
 
@@ -90,7 +90,7 @@ if "recurrent_policy" in model_params:
 actor_critic = Policy(env.observation_space.shape, env.action_space, device,
     base_kwargs={'recurrent': recurrent_policy})
 actor_critic.to(device)
-actor_critic.load_state_dict(torch.load(MODEL_SAVE_PATH, map_location='cpu'))
+actor_critic.load_state_dict(torch.load(MODEL_SAVE_PATH, map_location=device))
 
 
 # In[11]:
