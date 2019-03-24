@@ -112,7 +112,7 @@ class NNBase(nn.Module):
     @property
     def output_size(self):
         #return self._hidden_size
-        return self.hidden_size
+        return self.hidden_size * 2
 
     def _forward_gru(self, c, hxs, masks, prev_action_one_hot):    
         # x is a (T, N, -1) tensor that has been flatten to (T * N, -1)
@@ -196,7 +196,7 @@ class CNNBase(NNBase):
             nn.ReLU()
         )        
 
-        self.critic_linear = init2_(nn.Linear(hidden_size, 1))
+        self.critic_linear = init2_(nn.Linear(hidden_size * 2, 1))
 
         self.decoder = nn.Sequential(
             init_(nn.Linear(hidden_size, 32 * 7 * 7)),
@@ -254,6 +254,6 @@ class CNNBase(NNBase):
             z = self.reparameterize(q_mu, q_logvar)
             ob_reconstructed = self.decoder(z)
             
-            return self.critic_linear(q_mu), q_mu, rnn_hxs, ob_original, ob_reconstructed, q_mu, q_logvar, p_mu, p_logvar
+            return self.critic_linear(q_dist), q_dist, rnn_hxs, ob_original, ob_reconstructed, q_mu, q_logvar, p_mu, p_logvar
         else:
-            return self.critic_linear(q_mu), q_mu, rnn_hxs
+            return self.critic_linear(q_dist), q_dist, rnn_hxs
