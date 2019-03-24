@@ -7,10 +7,11 @@ def _flatten_helper(T, N, _tensor):
     return _tensor.view(T * N, *_tensor.size()[2:])
 
 def actions_to_one_hot(actions, num_actions):
+    N = actions.shape[0]
     a = actions.reshape(1, -1)
     a = a.squeeze()
-    b = torch.zeros(a.shape[0], num_actions)
-    b[torch.arange(a.shape[0]), a] = 1
+    b = torch.zeros(N, num_actions)
+    b[torch.arange(N), a] = 1
     return b
 
 class RolloutStorage(object):
