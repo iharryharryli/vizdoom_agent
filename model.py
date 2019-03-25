@@ -194,7 +194,21 @@ class CNNBase(NNBase):
             Flatten(),
             init_(nn.Linear(32 * 7 * 7, hidden_size)),
             nn.ReLU()
-        )        
+        )   
+
+        self.attention = nn.Sequential(
+            init_(nn.Conv2d(num_inputs, 32, 8, stride=4)),
+            nn.ReLU(),
+            init_(nn.Conv2d(32, 64, 4, stride=2)),
+            nn.ReLU(),
+            init_(nn.Conv2d(64, 32, 3, stride=1)),
+            nn.ReLU(),
+            Flatten(),
+            init_(nn.Linear(32 * 7 * 7, hidden_size)),
+            nn.ReLU(),
+            init3_(nn.Linear(hidden_size, 1)),
+            nn.Sigmoid()
+        )      
 
         self.critic_linear = init2_(nn.Linear(hidden_size, 1))
 
@@ -249,11 +263,14 @@ class CNNBase(NNBase):
         p_mu = p_dist[:, : self.hidden_size]
         p_logvar = p_dist[:, self.hidden_size :]
 
+        attention = self.attention(ob_original)
+        a2c_policy = torch.mul(q_mu, attention) + torch.mul(p_mu, 1 - attention)
+
         if is_training:
             # reconstruct
             z = self.reparameterize(q_mu, q_logvar)
             ob_reconstructed = self.decoder(z)
             
-            return self.critic_linear(q_mu), q_mu, rnn_hxs, ob_original, ob_reconstructed, q_mu, q_logvar, p_mu, p_logvar
+            return self.critic_linear(a2c_policy), a2c_policy, rnn_hxs, ob_original, ob_reconstructed, q_mu, q_logvar, p_mu, p_logvar
         else:
-            return self.critic_linear(q_mu), q_mu, rnn_hxs
+            return self.critic_linear(a2c_policy), a2c_policy, rnn_hxs
