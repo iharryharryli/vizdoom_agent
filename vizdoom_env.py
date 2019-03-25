@@ -13,11 +13,10 @@ def corrupt_rgb(ob, var):
     return res
 
 drop_input_init_safe_len = 10
-drop_input_freq = 10
 
 class ViZDoomENV:
     def __init__(self, seed, game_config, render=False, use_depth=False, use_rgb=True, reward_scale=1, frame_skip=4, jitter_rgb=False,
-                    noise_var=0.2, drop_input_prob=0.0, rotate_sensor=False, rotate_range=30):
+                    noise_var=0.2, drop_input_prob=0.0, rotate_sensor=False, rotate_range=30, drop_input_freq=3):
         # assign observation space
         self.use_rgb = use_rgb
         self.use_depth = use_depth
@@ -35,6 +34,7 @@ class ViZDoomENV:
         self.jitter_rgb = jitter_rgb
         self.noise_var = noise_var
         self.drop_input_prob = drop_input_prob
+        self.drop_input_freq = drop_input_freq
         self.prepare_drop_input()
         self.rotate_sensor = rotate_sensor
         self.rotate_range = rotate_range
@@ -125,7 +125,7 @@ class ViZDoomENV:
         #decide if drop input
         if self.drop_input_prob > 0.00001:
             if self.total_length > drop_input_init_safe_len and \
-            self.total_length % drop_input_freq == 0:
+            self.total_length % self.drop_input_freq == 0:
                 self.is_dropping_input = (random.random() < self.drop_input_prob)
 
         ob, reward, done = self.step_with_skip(action)
