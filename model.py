@@ -14,6 +14,43 @@ class UnFlatten(nn.Module):
     def forward(self, input):
         return input.view(input.size(0), 32, 7, 7)
 
+class ConvGRUCell(nn.Module):
+    """
+    Generate a convolutional GRU cell
+    """
+
+    def __init__(self, input_size, hidden_size, kernel_size):
+        super().__init__()
+        padding = kernel_size // 2
+        self.input_size = input_size
+        self.hidden_size = hidden_size
+        self.reset_gate = nn.Conv2d(input_size + hidden_size, hidden_size, kernel_size, padding=padding)
+        self.update_gate = nn.Conv2d(input_size + hidden_size, hidden_size, kernel_size, padding=padding)
+        self.out_gate = nn.Conv2d(input_size + hidden_size, hidden_size, kernel_size, padding=padding)
+
+        nn.init.orthogonal_(self.reset_gate.weight)
+        nn.init.orthogonal_(self.update_gate.weight)
+        nn.init.orthogonal_(self.out_gate.weight)
+        nn.init.constant_(self.reset_gate.bias, 0.)
+        nn.init.constant_(self.update_gate.bias, 0.)
+        nn.init.constant_(self.out_gate.bias, 0.)
+
+
+    def forward(self, input_, prev_state):
+
+        # get batch and spatial sizes
+        batch_size = input_.data.size()[0]
+        spatial_size = input_.data.size()[2:]
+
+        # data size is [batch, channel, height, width]
+        stacked_inputs = torch.cat([input_, prev_state], dim=1)
+        update = F.sigmoid(self.update_gate(stacked_inputs))
+        reset = F.sigmoid(self.reset_gate(stacked_inputs))
+        out_inputs = F.tanh(self.out_gate(torch.cat([input_, prev_state * reset], dim=1)))
+        new_state = prev_state * (1 - update) + out_inputs * update
+
+        return new_state
+
 
 class Policy(nn.Module):
     def __init__(self, obs_shape, action_space, device, base_kwargs=None):
@@ -85,21 +122,11 @@ class NNBase(nn.Module):
     def __init__(self, recurrent, hidden_size):
         super(NNBase, self).__init__()
 
-        self._hidden_size = hidden_size * 4
+        self._hidden_size = self.conv_rep_size * 3 + hidden_size 
         self._recurrent = recurrent
 
-        
-        self.h_gru = nn.GRUCell(hidden_size, hidden_size)
-        nn.init.orthogonal_(self.h_gru.weight_ih.data)
-        nn.init.orthogonal_(self.h_gru.weight_hh.data)
-        self.h_gru.bias_ih.data.fill_(0)
-        self.h_gru.bias_hh.data.fill_(0)
-
-        self.f_gru = nn.GRUCell(hidden_size, hidden_size)
-        nn.init.orthogonal_(self.f_gru.weight_ih.data)
-        nn.init.orthogonal_(self.f_gru.weight_hh.data)
-        self.f_gru.bias_ih.data.fill_(0)
-        self.f_gru.bias_hh.data.fill_(0)
+        self.h_gru = ConvGRUCell(self.conv_rep_shape[0], self.conv_rep_shape[0], 3)
+        self.f_gru = ConvGRUCell(self.conv_rep_shape[0], self.conv_rep_shape[0], 3)
 
         self.policy_gru = nn.GRUCell(hidden_size, hidden_size)
         nn.init.orthogonal_(self.policy_gru.weight_ih.data)
@@ -126,36 +153,39 @@ class NNBase(nn.Module):
         N = hxs.size(0)
         T = int(c.size(0) / N)
         # unflatten
-        c = c.view(T, N, c.size(1))
+        c = c.view(T, N, *self.conv_rep_shape)
         masks = masks.view(T, N, 1)
         prev_action_one_hot = prev_action_one_hot.view(T, N, self.num_actions)
 
-        f = hxs[:, : self.hidden_size]
-        h = hxs[:, self.hidden_size : 2 * self.hidden_size]
-        q_mu = hxs[:, 2 * self.hidden_size : 3 * self.hidden_size]
-        policy = hxs[:, 3 * self.hidden_size : ]
+        f = self.unflattener(hxs[:, : self.conv_rep_size])
+        h = self.unflattener(hxs[:, self.conv_rep_size : 2 * self.conv_rep_size])
+        q_mu = self.unflattener(hxs[:, 2 * self.conv_rep_size : 3 * self.conv_rep_size])
+        policy = hxs[:, 3 * self.conv_rep_size : ]
 
         acc_p_dist = []
         acc_q_dist = []
         acc_policy = []
 
         for i in range(T):
+            broad_prev_action_one_hot = self.broadcast_prev_action_one_hot(prev_action_one_hot[i])
+            broad_mask = masks[i].view(N, 1, 1, 1)
+
             # P
-            p_input = torch.cat([h, q_mu, prev_action_one_hot[i]], dim=1)
-            p_dist = self.p_network(p_input * masks[i])
-            p_mu = p_dist[:, : self.hidden_size]
+            p_input = torch.cat([h, q_mu, broad_prev_action_one_hot], dim=1)
+            p_dist = self.p_network(p_input * broad_mask)
+            p_mu = p_dist[:, : self.conv_rep_shape[0]]
 
             # Q
-            q_input = torch.cat([f, c[i], prev_action_one_hot[i]], dim=1)
-            q_dist = self.q_network(q_input * masks[i])
-            q_mu = q_dist[:, : self.hidden_size]
+            q_input = torch.cat([f, c[i], broad_prev_action_one_hot], dim=1)
+            q_dist = self.q_network(q_input * broad_mask)
+            q_mu = q_dist[:, : self.conv_rep_shape[0]]
 
             # Update GRU
-            f = self.f_gru(c[i], f * masks[i])
-            h = self.h_gru(p_mu, h * masks[i])
+            f = self.f_gru(c[i], f * broad_mask)
+            h = self.h_gru(p_mu, h * broad_mask)
 
             # Policy
-            policy = self.policy_gru(q_mu, policy * masks[i])
+            policy = self.policy_gru(self.policy_net(q_mu), policy * masks[i])
 
             # Save Output
             acc_p_dist.append(p_dist)
@@ -168,17 +198,21 @@ class NNBase(nn.Module):
         acc_q_dist = torch.stack(acc_q_dist, dim=0)
         acc_policy = torch.stack(acc_policy, dim=0)
         # flatten
-        acc_p_dist = acc_p_dist.view(T * N, -1)
-        acc_q_dist = acc_q_dist.view(T * N, -1)
+        acc_p_dist = acc_p_dist.view(T * N, *self.conv_dist_shape)
+        acc_q_dist = acc_q_dist.view(T * N, *self.conv_dist_shape)
         acc_policy = acc_policy.view(T * N, -1)
 
-        hxs = torch.cat([f,h,q_mu,policy], dim=1)
+        hxs = torch.cat([self.flattener(f),self.flattener(h),
+            self.flattener(q_mu),policy], dim=1)
 
         return acc_p_dist, acc_q_dist, acc_policy, hxs
 
 
 class CNNBase(NNBase):
     def __init__(self, num_inputs, num_actions, device, recurrent=False, hidden_size=512):
+        self.conv_rep_shape = (32, 7, 7)
+        self.conv_dist_shape = (64, 7, 7)
+        self.conv_rep_size = 32 * 7 * 7
         super(CNNBase, self).__init__(recurrent, hidden_size)
 
         self.hidden_size = hidden_size
@@ -206,17 +240,11 @@ class CNNBase(NNBase):
             nn.ReLU(),
             init_(nn.Conv2d(64, 32, 3, stride=1)),
             nn.ReLU(),
-            Flatten(),
-            init_(nn.Linear(32 * 7 * 7, hidden_size)),
-            nn.ReLU()
         )        
 
         self.critic_linear = init2_(nn.Linear(hidden_size, 1))
 
         self.decoder = nn.Sequential(
-            init_(nn.Linear(hidden_size, 32 * 7 * 7)),
-            nn.ReLU(),
-            UnFlatten(),
             init_(nn.ConvTranspose2d(32, 64, kernel_size=3, stride=1)),
             nn.ReLU(),
             init_(nn.ConvTranspose2d(64, 32, kernel_size=4, stride=2)),
@@ -228,20 +256,31 @@ class CNNBase(NNBase):
         dist_size = hidden_size * 2
 
         self.p_network = nn.Sequential(
-            init_(nn.Linear(hidden_size + hidden_size + num_actions, dist_size)),
+            init_(nn.Conv2d(32 + 32 + num_actions, 64, kernel_size=3, stride=1, padding=1)),
             nn.ReLU(),
-            init_(nn.Linear(dist_size, dist_size)),
+            init_(nn.Conv2d(64, 64, kernel_size=3, stride=1, padding=1)),
             nn.ReLU(),
-            init2_(nn.Linear(dist_size, dist_size))
+            init2_(nn.Conv2d(64, 64, kernel_size=3, stride=1, padding=1)),
         )
 
         self.q_network = nn.Sequential(
-            init_(nn.Linear(hidden_size + hidden_size + num_actions, dist_size)),
+            init_(nn.Conv2d(32 + 32 + num_actions, 64, kernel_size=3, stride=1, padding=1)),
             nn.ReLU(),
-            init_(nn.Linear(dist_size, dist_size)),
+            init_(nn.Conv2d(64, 64, kernel_size=3, stride=1, padding=1)),
             nn.ReLU(),
-            init2_(nn.Linear(dist_size, dist_size))
+            init2_(nn.Conv2d(64, 64, kernel_size=3, stride=1, padding=1)),
         )
+
+        self.policy_net = nn.Sequential(
+            Flatten(),
+            init_(nn.Linear(self.conv_rep_size, hidden_size)),
+            nn.ReLU(),
+            init_(nn.Linear(hidden_size, hidden_size)),
+            nn.ReLU()
+        )
+
+        self.unflattener = UnFlatten()
+        self.flattener = Flatten()
 
         self.train()
 
@@ -252,17 +291,25 @@ class CNNBase(NNBase):
         z = mu + std * esp
         return z
 
+    def broadcast_prev_action_one_hot(self, prev_action_one_hot):
+        wid = self.conv_rep_shape[-1]
+        x = prev_action_one_hot[:,:,None]
+        x = x.repeat(1, 1, wid * wid)
+        x = x.view(x.size(0), x.size(1), wid, wid)
+        return x
+
+
     def forward(self, inputs, rnn_hxs, masks, prev_action_one_hot, is_training=False):
         ob_original = inputs / 255.0
 
         c = self.main(ob_original)
-        
+
         p_dist, q_dist, policy, rnn_hxs = self._forward_gru(c, rnn_hxs, masks, prev_action_one_hot)
 
-        q_mu = q_dist[:, : self.hidden_size]
-        q_logvar = q_dist[:, self.hidden_size :]
-        p_mu = p_dist[:, : self.hidden_size]
-        p_logvar = p_dist[:, self.hidden_size :]
+        q_mu = q_dist[:, : self.conv_rep_shape[0]]
+        q_logvar = q_dist[:, self.conv_rep_shape[0] :]
+        p_mu = p_dist[:, : self.conv_rep_shape[0]]
+        p_logvar = p_dist[:, self.conv_rep_shape[0] :]
 
         if is_training:
             # reconstruct
