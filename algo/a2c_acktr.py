@@ -67,10 +67,11 @@ class A2C_ACKTR():
         kl = kl.mean()
         new_loss = self.mse_coef * reconstuct_mse + self.kl_coef * kl 
 
+        total_loss = (value_loss * self.value_loss_coef + action_loss -
+         dist_entropy * self.entropy_coef + new_loss)
 
         self.optimizer.zero_grad()
-        (value_loss * self.value_loss_coef + action_loss -
-         dist_entropy * self.entropy_coef + new_loss).backward()
+        total_loss.backward()
 
         if self.acktr == False:
             nn.utils.clip_grad_norm_(self.actor_critic.parameters(),
@@ -78,5 +79,5 @@ class A2C_ACKTR():
 
         self.optimizer.step()
 
-        return value_loss.item(), action_loss.item(), dist_entropy.item(), \
+        return total_loss.item(), value_loss.item(), action_loss.item(), dist_entropy.item(), \
             reconstuct_mse.item(), kl.item()
