@@ -84,6 +84,7 @@ class NNBase(nn.Module):
 
     def __init__(self, recurrent, hidden_size):
         super(NNBase, self).__init__()
+        self.global_acc = 0
 
         self._hidden_size = hidden_size * 3
         self._recurrent = recurrent
@@ -145,16 +146,20 @@ class NNBase(nn.Module):
 
             # Q
             q_mu = c[i]
+            if self.global_acc % 4 != 0:
+                q_mu = p_mu
 
             # Update GRU
             h = self.h_gru(p_mu, h * masks[i])
 
             # Policy
-            policy = self.policy_gru(q_mu, policy * masks[i])
+            policy = self.policy_gru(p_mu, policy * masks[i])
 
             # Save Output
             acc_p_dist.append(p_dist)
             acc_policy.append(policy)
+
+            self.global_acc += 1
 
         # assert len(outputs) == T
         # x is a (T, N, -1) tensor
