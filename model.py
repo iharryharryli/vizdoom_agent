@@ -77,7 +77,7 @@ class NNBase(nn.Module):
 
     def __init__(self, recurrent, recurrent_input_size, hidden_size):
         super(NNBase, self).__init__()
-
+        self.global_acc = 0
         self._hidden_size = hidden_size
         self._recurrent = recurrent
 
@@ -103,8 +103,12 @@ class NNBase(nn.Module):
         return self._hidden_size
 
     def _forward_gru(self, x, hxs, masks):
+        freq = 4
+        if self.global_acc % freq != 0:
+            x = torch.zeros(*x.shape)
+        
         if x.size(0) == hxs.size(0):
-            x = hxs = self.gru(x, hxs * masks)
+            x = self.gru(x, hxs * masks)
         else:
             # x is a (T, N, -1) tensor that has been flatten to (T * N, -1)
             N = hxs.size(0)
@@ -127,6 +131,9 @@ class NNBase(nn.Module):
             # flatten
             x = x.view(T * N, -1)
 
+        if self.global_acc % freq == 0:
+            hxs = x
+        self.global_acc += 1
         return x, hxs
 
 
