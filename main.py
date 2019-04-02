@@ -42,6 +42,7 @@ env_arg = {
     "drop_input_freq": args.drop_input_freq,
     "rotate_sensor": args.rotate_sensor,
     "rotate_range": args.rotate_range,
+    "flicker_freq": args.flicker_freq,
 }
 
 result_dir = args.result_dir
@@ -112,7 +113,7 @@ device = torch.device("cuda:0" if args.cuda else "cpu")
 
 envs = make_vec_envs_ViZDoom(parameters['seed'], parameters['num_processes'], device, **env_arg)
 
-actor_critic = Policy(envs.observation_space.shape, envs.action_space,
+actor_critic = Policy(envs.observation_space.shape, envs.action_space, device,
     base_kwargs={'recurrent': parameters['recurrent_policy']})
 actor_critic.to(device)
 
@@ -160,7 +161,8 @@ for j in range(num_updates_init, num_updates):
             value, action, action_log_prob, recurrent_hidden_states = actor_critic.act(
                     rollouts.obs[step],
                     rollouts.recurrent_hidden_states[step],
-                    rollouts.masks[step])
+                    rollouts.masks[step],
+                    None)
 
         # Obser reward and next obs
         obs, reward, done, infos = envs.step(action)

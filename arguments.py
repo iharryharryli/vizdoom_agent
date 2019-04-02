@@ -60,6 +60,7 @@ def get_args():
 
     parser.add_argument('--drop-input-prob', type=float, default=0.0)
     parser.add_argument('--drop-input-freq', type=int, default=3)
+    parser.add_argument('--flicker-freq', type=int, default=1)
 
     parser.add_argument('--rotate-sensor', action='store_true', default=False)
     parser.add_argument('--rotate-range', type=float, default=30.0)

@@ -16,7 +16,7 @@ drop_input_init_safe_len = 10
 
 class ViZDoomENV:
     def __init__(self, seed, game_config, render=False, use_depth=False, use_rgb=True, reward_scale=1, frame_skip=4, jitter_rgb=False,
-                    noise_var=0.2, drop_input_prob=0.0, rotate_sensor=False, rotate_range=30, drop_input_freq=3):
+                    noise_var=0.2, drop_input_prob=0.0, rotate_sensor=False, rotate_range=30, drop_input_freq=3, flicker_freq=1):
         # assign observation space
         self.use_rgb = use_rgb
         self.use_depth = use_depth
@@ -35,6 +35,7 @@ class ViZDoomENV:
         self.noise_var = noise_var
         self.drop_input_prob = drop_input_prob
         self.drop_input_freq = drop_input_freq
+        self.flicker_freq = flicker_freq
         self.prepare_drop_input()
         self.rotate_sensor = rotate_sensor
         self.rotate_range = rotate_range
@@ -127,6 +128,8 @@ class ViZDoomENV:
             if self.total_length > drop_input_init_safe_len and \
             self.total_length % self.drop_input_freq == 0:
                 self.is_dropping_input = (random.random() < self.drop_input_prob)
+        elif self.flicker_freq > 1:
+            self.is_dropping_input = not(self.total_length % self.flicker_freq == 0)
 
         ob, reward, done = self.step_with_skip(action)
 
