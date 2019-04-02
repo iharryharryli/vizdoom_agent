@@ -95,12 +95,6 @@ class NNBase(nn.Module):
         self.h_gru.bias_ih.data.fill_(0)
         self.h_gru.bias_hh.data.fill_(0)
 
-        self.f_gru = nn.GRUCell(hidden_size, hidden_size)
-        nn.init.orthogonal_(self.f_gru.weight_ih.data)
-        nn.init.orthogonal_(self.f_gru.weight_hh.data)
-        self.f_gru.bias_ih.data.fill_(0)
-        self.f_gru.bias_hh.data.fill_(0)
-
         self.policy_gru = nn.GRUCell(hidden_size, hidden_size)
         nn.init.orthogonal_(self.policy_gru.weight_ih.data)
         nn.init.orthogonal_(self.policy_gru.weight_hh.data)
@@ -149,8 +143,11 @@ class NNBase(nn.Module):
             # Update GRU
             h = self.h_gru(p_mu, h * masks[i])
 
+            policy_input = torch.mul(p_mu, self.split_worker_mask) + \
+                torch.mul(q_mu, 1.0 - self.split_worker_mask)
+
             # Policy
-            policy = self.policy_gru(q_mu, policy * masks[i])
+            policy = self.policy_gru(policy_input, policy * masks[i])
 
             # Save Output
             acc_p_dist.append(p_dist)
@@ -170,7 +167,7 @@ class NNBase(nn.Module):
 
 
 class CNNBase(NNBase):
-    def __init__(self, num_inputs, num_actions, device, recurrent=False, hidden_size=512):
+    def __init__(self, num_inputs, num_actions, device, num_worker, num_p_worker, recurrent=False, hidden_size=512):
         super(CNNBase, self).__init__(recurrent, hidden_size)
 
         self.hidden_size = hidden_size
@@ -234,6 +231,12 @@ class CNNBase(NNBase):
         self.q_network = init2_(nn.Linear(hidden_size, dist_size))
 
         self.train()
+
+        # Initialize split worker mask
+        split_worker_mask = torch.zeros(num_worker).to(device)
+        split_worker_mask[:num_p_worker] = 1.0
+        split_worker_mask = split_worker_mask[:, None]
+        self.split_worker_mask = split_worker_mask
 
     def reparameterize(self, mu, logvar):
         std = logvar.mul(0.5).exp()

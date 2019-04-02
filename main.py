@@ -68,6 +68,7 @@ parameters['algo'] = args.algo
 parameters['gamma'] = args.gamma
 parameters['num_steps'] = args.num_steps
 parameters['num_processes'] = args.num_processes
+parameters['num_p_worker'] = args.num_p_worker
 parameters['value_loss_coef'] = args.value_loss_coef
 parameters['mse_coef'] = args.mse_coef
 parameters['kl_coef'] = args.kl_coef
@@ -114,7 +115,9 @@ device = torch.device("cuda:0" if args.cuda else "cpu")
 envs = make_vec_envs_ViZDoom(parameters['seed'], parameters['num_processes'], device, **env_arg)
 
 actor_critic = Policy(envs.observation_space.shape, envs.action_space, device,
-    base_kwargs={'recurrent': args.recurrent_policy})
+    base_kwargs={'recurrent': args.recurrent_policy,
+    'num_worker': parameters['num_processes'],
+    'num_p_worker': parameters['num_p_worker']})
 actor_critic.to(device)
 
 if args.algo == 'a2c':

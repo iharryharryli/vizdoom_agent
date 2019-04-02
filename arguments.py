@@ -56,7 +56,7 @@ def get_args():
     parser.add_argument('--jitter-rgb', action='store_true', default=False)
     parser.add_argument('--continue-training', action='store_true', default=False)
 
-    parser.add_argument('--mse-coef', type=float, default=1.0)
+    parser.add_argument('--mse-coef', type=float, default=100.0)
     parser.add_argument('--kl-coef', type=float, default=1.0)
     parser.add_argument('--noise-var', type=float, default=0.1)
 
@@ -66,6 +66,7 @@ def get_args():
     parser.add_argument('--rotate-sensor', action='store_true', default=False)
     parser.add_argument('--rotate-range', type=float, default=30.0)
 
+    parser.add_argument('--num-p-worker', type=int, default=2)
 
 
     args = parser.parse_args()
