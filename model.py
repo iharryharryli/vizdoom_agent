@@ -85,21 +85,8 @@ class NNBase(nn.Module):
     def __init__(self, recurrent, hidden_size):
         super(NNBase, self).__init__()
 
-        self._hidden_size = hidden_size * 3
+        self._hidden_size = hidden_size * 2
         self._recurrent = recurrent
-
-        
-        self.h_gru = nn.GRUCell(hidden_size, hidden_size)
-        nn.init.orthogonal_(self.h_gru.weight_ih.data)
-        nn.init.orthogonal_(self.h_gru.weight_hh.data)
-        self.h_gru.bias_ih.data.fill_(0)
-        self.h_gru.bias_hh.data.fill_(0)
-
-        self.f_gru = nn.GRUCell(hidden_size, hidden_size)
-        nn.init.orthogonal_(self.f_gru.weight_ih.data)
-        nn.init.orthogonal_(self.f_gru.weight_hh.data)
-        self.f_gru.bias_ih.data.fill_(0)
-        self.f_gru.bias_hh.data.fill_(0)
 
         self.policy_gru = nn.GRUCell(hidden_size, hidden_size)
         nn.init.orthogonal_(self.policy_gru.weight_ih.data)
@@ -130,24 +117,20 @@ class NNBase(nn.Module):
         masks = masks.view(T, N, 1)
         prev_action_one_hot = prev_action_one_hot.view(T, N, self.num_actions)
 
-        h = hxs[:, : self.hidden_size]
-        q_mu = hxs[:, self.hidden_size : 2 * self.hidden_size]
-        policy = hxs[:, 2 * self.hidden_size : ]
+        q_mu = hxs[:, : self.hidden_size]
+        policy = hxs[:, self.hidden_size : ]
 
         acc_p_dist = []
         acc_policy = []
 
         for i in range(T):
             # P
-            p_input = torch.cat([h, q_mu, prev_action_one_hot[i]], dim=1)
+            p_input = torch.cat([q_mu, prev_action_one_hot[i]], dim=1)
             p_dist = self.p_network(p_input * masks[i])
             p_mu = p_dist[:, : self.hidden_size]
 
             # Q
             q_mu = c[i]
-
-            # Update GRU
-            h = self.h_gru(p_mu, h * masks[i])
 
             # Policy
             policy = self.policy_gru(q_mu, policy * masks[i])
@@ -164,7 +147,7 @@ class NNBase(nn.Module):
         acc_p_dist = acc_p_dist.view(T * N, -1)
         acc_policy = acc_policy.view(T * N, -1)
 
-        hxs = torch.cat([h,q_mu,policy], dim=1)
+        hxs = torch.cat([q_mu,policy], dim=1)
 
         return acc_p_dist, acc_policy, hxs
 
@@ -224,7 +207,7 @@ class CNNBase(NNBase):
         dist_size = hidden_size * 2
 
         self.p_network = nn.Sequential(
-            init_(nn.Linear(hidden_size + hidden_size + num_actions, dist_size)),
+            init_(nn.Linear(hidden_size + num_actions, dist_size)),
             nn.ReLU(),
             init_(nn.Linear(dist_size, dist_size)),
             nn.ReLU(),
