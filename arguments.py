@@ -54,7 +54,7 @@ def get_args():
     parser.add_argument('--use-depth', action='store_true', default=False)
     parser.add_argument('--disable-rgb', action='store_true', default=False)
     parser.add_argument('--jitter-rgb', action='store_true', default=False)
-    parser.add_argument('--continue-training', action='store_true', default=False)
+    parser.add_argument('--continue-training', action='store_true', default=True)
 
     parser.add_argument('--mse-coef', type=float, default=100.0)
     parser.add_argument('--kl-coef', type=float, default=1.0)
@@ -62,6 +62,8 @@ def get_args():
 
 
     parser.add_argument('--drop-input-prob', type=float, default=0.0)
+    parser.add_argument('--drop-input-freq', type=int, default=3)
+    parser.add_argument('--flicker-freq', type=int, default=1)
 
     parser.add_argument('--rotate-sensor', action='store_true', default=False)
     parser.add_argument('--rotate-range', type=float, default=30.0)

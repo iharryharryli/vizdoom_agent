@@ -35,10 +35,10 @@ class A2C_ACKTR():
             self.optimizer = KFACOptimizer(actor_critic)
         else:
             if use_adam:
-                self.optimizer = optim.Adam(actor_critic.parameters(), lr=lr, eps=eps)
+                self.optimizer = optim.Adam(actor_critic.attention.base.parameters(), lr=lr, eps=eps)
             else:
                 self.optimizer = optim.RMSprop(
-                actor_critic.parameters(), lr, eps=eps, alpha=alpha)
+                actor_critic.base.attention.parameters(), lr, eps=eps, alpha=alpha)
 
     def update(self, rollouts):
         obs_shape = rollouts.obs.size()[2:]
@@ -74,7 +74,7 @@ class A2C_ACKTR():
         total_loss.backward()
 
         if self.acktr == False:
-            nn.utils.clip_grad_norm_(self.actor_critic.parameters(),
+            nn.utils.clip_grad_norm_(self.actor_critic.base.attention.parameters(),
                                      self.max_grad_norm)
 
         self.optimizer.step()

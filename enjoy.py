@@ -79,9 +79,7 @@ env = ViZDoomENV(args.seed, **env_params)
 # In[9]:
 
 
-recurrent_policy = False
-if "recurrent_policy" in model_params:
-    recurrent_policy = model_params["recurrent_policy"]
+recurrent_policy = True
 
 
 # In[10]:

@@ -39,8 +39,10 @@ env_arg = {
     "jitter_rgb": args.jitter_rgb,
     "noise_var": args.noise_var,
     "drop_input_prob": args.drop_input_prob,
+    "drop_input_freq": args.drop_input_freq,
     "rotate_sensor": args.rotate_sensor,
     "rotate_range": args.rotate_range,
+    "flicker_freq": args.flicker_freq,
 }
 
 result_dir = args.result_dir
@@ -114,7 +116,7 @@ device = torch.device("cuda:0" if args.cuda else "cpu")
 envs = make_vec_envs_ViZDoom(parameters['seed'], parameters['num_processes'], device, **env_arg)
 
 actor_critic = Policy(envs.observation_space.shape, envs.action_space, device,
-    base_kwargs={'recurrent': args.recurrent_policy})
+    base_kwargs={'recurrent': parameters['recurrent_policy']})
 actor_critic.to(device)
 
 if args.algo == 'a2c':
@@ -146,7 +148,7 @@ episode_lengths = deque(maxlen=recent_count)
 if args.continue_training:
     progress = json.load(open(progress_save))
     num_updates_init = progress["last_saved_num_updates"] 
-    actor_critic.load_state_dict(torch.load(MODEL_SAVE_PATH, map_location=device))
+    actor_critic.load_state_dict(torch.load(MODEL_SAVE_PATH, map_location=device), strict=False)
 else:
     num_updates_init = 0
     progress = {

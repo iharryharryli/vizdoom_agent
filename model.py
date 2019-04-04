@@ -108,7 +108,7 @@ class NNBase(nn.Module):
         #return self._hidden_size
         return self.hidden_size
 
-    def _forward_gru(self, c, hxs, masks, prev_action_one_hot):    
+    def _forward_gru(self, c, attention, hxs, masks, prev_action_one_hot):    
         # x is a (T, N, -1) tensor that has been flatten to (T * N, -1)
         N = hxs.size(0)
         T = int(c.size(0) / N)
@@ -116,6 +116,7 @@ class NNBase(nn.Module):
         c = c.view(T, N, c.size(1))
         masks = masks.view(T, N, 1)
         prev_action_one_hot = prev_action_one_hot.view(T, N, self.num_actions)
+        attention = attention.view(T, N, 1)
 
         q_mu = hxs[:, : self.hidden_size]
         policy = hxs[:, self.hidden_size : ]
@@ -130,7 +131,7 @@ class NNBase(nn.Module):
             p_mu = p_dist[:, : self.hidden_size]
 
             # Q
-            q_mu = c[i]
+            q_mu = torch.mul(c[i], attention[i]) + torch.mul(p_mu, 1 - attention[i])
 
             # Policy
             policy = self.policy_gru(q_mu, policy * masks[i])
@@ -216,6 +217,20 @@ class CNNBase(NNBase):
 
         self.q_network = init2_(nn.Linear(hidden_size, dist_size))
 
+        self.attention = nn.Sequential(
+            init_(nn.Conv2d(num_inputs, 32, 8, stride=4)),
+            nn.ReLU(),
+            init_(nn.Conv2d(32, 64, 4, stride=2)),
+            nn.ReLU(),
+            init_(nn.Conv2d(64, 32, 3, stride=1)),
+            nn.ReLU(),
+            Flatten(),
+            init_(nn.Linear(32 * 7 * 7, hidden_size)),
+            nn.ReLU(),
+            init3_(nn.Linear(hidden_size, 1)),
+            nn.Sigmoid()
+        )        
+
         self.train()
 
     def reparameterize(self, mu, logvar):
@@ -229,12 +244,13 @@ class CNNBase(NNBase):
         ob_original = inputs / 255.0
 
         c = self.main(ob_original)
+        attention = self.attention(ob_original)
 
         q_dist = self.q_network(c)
         q_mu = q_dist[:, : self.hidden_size]
         q_logvar = q_dist[:, self.hidden_size :]
         
-        p_dist, policy, rnn_hxs = self._forward_gru(q_mu, rnn_hxs, masks, prev_action_one_hot)
+        p_dist, policy, rnn_hxs = self._forward_gru(q_mu, attention, rnn_hxs, masks, prev_action_one_hot)
 
         p_mu = p_dist[:, : self.hidden_size]
         p_logvar = p_dist[:, self.hidden_size :]
