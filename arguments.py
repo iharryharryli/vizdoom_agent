@@ -48,7 +48,7 @@ def get_args():
     parser.add_argument('--use-rmsprop', action='store_true', default=True,
                         help='use RMSprop optimizer for A2C')
     parser.add_argument('--reward-scale', type=float, default=1.0)
-    parser.add_argument('--frame-skip', type=int, default=3,
+    parser.add_argument('--frame-skip', type=int, default=4,
                         help='number of frames to skip for each step')
     parser.add_argument('--game-config', default="ViZDoom_map/static_health.cfg")
     parser.add_argument('--use-depth', action='store_true', default=False)
