@@ -28,7 +28,7 @@ from collections import deque
 parser = argparse.ArgumentParser(description='RL', formatter_class=argparse.ArgumentDefaultsHelpFormatter)
 parser.add_argument('result_dir', type=str)
 parser.add_argument('--seed', type=int, default=1)
-parser.add_argument('--fps', type=int, default=120)
+parser.add_argument('--fps', type=int, default=20)
 parser.add_argument('--eval', action='store_true')
 
 
