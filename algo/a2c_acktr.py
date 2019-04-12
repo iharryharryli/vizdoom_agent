@@ -62,7 +62,8 @@ class A2C_ACKTR():
         action_loss = -(advantages.detach() * action_log_probs).mean()
 
         # mse & kl
-        reconstuct_mse = F.mse_loss(ob_reconstructed, ob_original)
+        reconstuct_mse = (ob_reconstructed - ob_original).pow(2).mean()
+        
         kl = p_logvar - q_logvar + (q_logvar.exp() + (q_mu - p_mu).pow(2)) / (p_logvar.exp()) - 1
         kl = kl.mean()
         new_loss = self.mse_coef * reconstuct_mse + self.kl_coef * kl 
@@ -73,8 +74,7 @@ class A2C_ACKTR():
         self.optimizer.zero_grad()
         total_loss.backward()
 
-        if self.acktr == False:
-            nn.utils.clip_grad_norm_(self.actor_critic.parameters(),
+        nn.utils.clip_grad_norm_(self.actor_critic.parameters(),
                                      self.max_grad_norm)
 
         self.optimizer.step()

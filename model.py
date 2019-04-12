@@ -95,12 +95,6 @@ class NNBase(nn.Module):
         self.h_gru.bias_ih.data.fill_(0)
         self.h_gru.bias_hh.data.fill_(0)
 
-        self.f_gru = nn.GRUCell(hidden_size, hidden_size)
-        nn.init.orthogonal_(self.f_gru.weight_ih.data)
-        nn.init.orthogonal_(self.f_gru.weight_hh.data)
-        self.f_gru.bias_ih.data.fill_(0)
-        self.f_gru.bias_hh.data.fill_(0)
-
         self.policy_gru = nn.GRUCell(hidden_size, hidden_size)
         nn.init.orthogonal_(self.policy_gru.weight_ih.data)
         nn.init.orthogonal_(self.policy_gru.weight_hh.data)
@@ -191,35 +185,23 @@ class CNNBase(NNBase):
             lambda x: nn.init.constant_(x, 0),
             nn.init.calculate_gain('sigmoid'))
 
-        self.main = nn.Sequential(
+        init4_ = lambda m: init(m,
+            nn.init.orthogonal_,
+            lambda x: nn.init.constant_(x, 0),
+            nn.init.calculate_gain('tanh'))
+
+
+        self.img_encoder = nn.Sequential(
             init_(nn.Conv2d(num_inputs, 32, 8, stride=4)),
             nn.ReLU(),
             init_(nn.Conv2d(32, 64, 4, stride=2)),
             nn.ReLU(),
-            init_(nn.Conv2d(64, 32, 3, stride=1)),
-            nn.ReLU(),
+            init4_(nn.Conv2d(64, 32, 3, stride=1)),
+            nn.Tanh(),
             Flatten(),
-            init_(nn.Linear(32 * 7 * 7, hidden_size)),
-            nn.ReLU(),
-            init_(nn.Linear(hidden_size, hidden_size)),
-            nn.ReLU()
         )        
 
         self.critic_linear = init2_(nn.Linear(hidden_size, 1))
-
-        self.decoder = nn.Sequential(
-            init_(nn.Linear(hidden_size, hidden_size)),
-            nn.ReLU(),
-            init_(nn.Linear(hidden_size, 32 * 7 * 7)),
-            nn.ReLU(),
-            UnFlatten(),
-            init_(nn.ConvTranspose2d(32, 64, kernel_size=3, stride=1)),
-            nn.ReLU(),
-            init_(nn.ConvTranspose2d(64, 32, kernel_size=4, stride=2)),
-            nn.ReLU(),
-            init3_(nn.ConvTranspose2d(32, num_inputs, kernel_size=8, stride=4)),
-            nn.Sigmoid()
-        )
 
         dist_size = hidden_size * 2
 
@@ -231,7 +213,20 @@ class CNNBase(NNBase):
             init2_(nn.Linear(dist_size, dist_size))
         )
 
-        self.q_network = init2_(nn.Linear(hidden_size, dist_size))
+        self.q_network = nn.Sequential(
+            init_(nn.Linear(32 * 7 * 7, dist_size)),
+            nn.ReLU(),
+            init_(nn.Linear(dist_size, hidden_size)),
+            nn.ReLU(),
+            init2_(nn.Linear(hidden_size, dist_size))
+        )    
+
+        self.decoder = nn.Sequential(
+            init_(nn.Linear(hidden_size, dist_size)),
+            nn.ReLU(),
+            init4_(nn.Linear(dist_size, 32 * 7 * 7)),
+            nn.Tanh(),
+        )   
 
         self.train()
 
@@ -243,11 +238,9 @@ class CNNBase(NNBase):
         return z
 
     def forward(self, inputs, rnn_hxs, masks, prev_action_one_hot, is_training=False):
-        ob_original = inputs / 255.0
+        ob_original = self.img_encoder(inputs / 255.0)
 
-        c = self.main(ob_original)
-
-        q_dist = self.q_network(c)
+        q_dist = self.q_network(ob_original)
         q_mu = q_dist[:, : self.hidden_size]
         q_logvar = q_dist[:, self.hidden_size :]
         
@@ -258,7 +251,7 @@ class CNNBase(NNBase):
 
         if is_training:
             # reconstruct
-            z = self.reparameterize(q_mu, q_logvar)
+            z = self.reparameterize(q_mu, q_logvar)            
             ob_reconstructed = self.decoder(z)
             
             return self.critic_linear(policy), policy, rnn_hxs, ob_original, ob_reconstructed, q_mu, q_logvar, p_mu, p_logvar
