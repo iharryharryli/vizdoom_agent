@@ -130,18 +130,17 @@ class NNBase(nn.Module):
         acc_policy = []
 
         for i in range(T):
-            with torch.no_grad():
-                h_and_action = torch.cat([h, prev_action_one_hot[i]], dim=1) * masks[i]
+            h_and_action = torch.cat([h, prev_action_one_hot[i]], dim=1) * masks[i]
 
-                # Q
-                q_input = torch.cat([c[i], h_and_action], dim=1)
-                q_dist = self.q_network(q_input)
-                q_mu = q_dist[:, : self.hidden_size]
+            # Q
+            q_input = torch.cat([c[i], h_and_action], dim=1)
+            q_dist = self.q_network(q_input)
+            q_mu = q_dist[:, : self.hidden_size]
 
-                z = q_mu
+            z = q_mu
 
-                # Update GRU
-                h = self.h_gru(self.extractor(z), h * masks[i])
+            # Update GRU
+            h = self.h_gru(self.extractor(z), h * masks[i])
 
             # Policy
             policy = self.policy_gru(self.policy_net(z), policy * masks[i])
@@ -165,7 +164,6 @@ class NNBase(nn.Module):
         T = int(c.size(0) / N)
         # unflatten
         c = c.view(T, N, c.size(1))
-        c = c.detach()
         masks = masks.view(T, N, 1)
         prev_action_one_hot = prev_action_one_hot.view(T, N, self.num_actions)
 
@@ -304,7 +302,7 @@ class CNNBase(NNBase):
         policy, rnn_hxs = self._forward_gru_policy(ob_original, rnn_hxs, masks, prev_action_one_hot)
 
         if is_training:
-            p_dist, q_dist = self._forward_gru_dist(ob_original, rnn_hxs, masks, prev_action_one_hot)
+            p_dist, q_dist = self._forward_gru_dist(ob_original.detach(), rnn_hxs, masks, prev_action_one_hot)
             
             q_mu = q_dist[:, : self.hidden_size]
             q_logvar = q_dist[:, self.hidden_size :]
