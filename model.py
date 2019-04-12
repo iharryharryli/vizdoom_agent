@@ -115,7 +115,7 @@ class NNBase(nn.Module):
         #return self._hidden_size
         return self.hidden_size
 
-    def _forward_gru(self, c, hxs, masks, prev_action_one_hot):    
+    def _forward_gru_policy(self, c, hxs, masks, prev_action_one_hot):    
         # x is a (T, N, -1) tensor that has been flatten to (T * N, -1)
         N = hxs.size(0)
         T = int(c.size(0) / N)
@@ -127,9 +127,52 @@ class NNBase(nn.Module):
         h = hxs[:, : self.hidden_size]
         policy = hxs[:, self.hidden_size : ]
 
+        acc_policy = []
+
+        for i in range(T):
+            with torch.no_grad():
+                h_and_action = torch.cat([h, prev_action_one_hot[i]], dim=1) * masks[i]
+
+                # Q
+                q_input = torch.cat([c[i], h_and_action], dim=1)
+                q_dist = self.q_network(q_input)
+                q_mu = q_dist[:, : self.hidden_size]
+
+                z = q_mu
+
+                # Update GRU
+                h = self.h_gru(self.extractor(z), h * masks[i])
+
+            # Policy
+            policy = self.policy_gru(self.policy_net(z), policy * masks[i])
+
+            # Save Output
+            acc_policy.append(policy)
+
+        # assert len(outputs) == T
+        # x is a (T, N, -1) tensor
+        acc_policy = torch.stack(acc_policy, dim=0)
+        # flatten
+        acc_policy = acc_policy.view(T * N, -1)
+
+        hxs = torch.cat([h, policy], dim=1)
+
+        return acc_policy, hxs
+
+    def _forward_gru_dist(self, c, hxs, masks, prev_action_one_hot):    
+        # x is a (T, N, -1) tensor that has been flatten to (T * N, -1)
+        N = hxs.size(0)
+        T = int(c.size(0) / N)
+        # unflatten
+        c = c.view(T, N, c.size(1))
+        c = c.detach()
+        masks = masks.view(T, N, 1)
+        prev_action_one_hot = prev_action_one_hot.view(T, N, self.num_actions)
+
+        h = hxs[:, : self.hidden_size]
+
         acc_p_dist = []
         acc_q_dist = []
-        acc_policy = []
 
         for i in range(T):
             h_and_action = torch.cat([h, prev_action_one_hot[i]], dim=1) * masks[i]
@@ -148,27 +191,19 @@ class NNBase(nn.Module):
             # Update GRU
             h = self.h_gru(self.extractor(z), h * masks[i])
 
-            # Policy
-            policy = self.policy_gru(self.policy_net(z), policy * masks[i])
-
             # Save Output
             acc_p_dist.append(p_dist)
             acc_q_dist.append(q_dist)
-            acc_policy.append(policy)
 
         # assert len(outputs) == T
         # x is a (T, N, -1) tensor
         acc_p_dist = torch.stack(acc_p_dist, dim=0)
         acc_q_dist = torch.stack(acc_q_dist, dim=0)
-        acc_policy = torch.stack(acc_policy, dim=0)
         # flatten
         acc_p_dist = acc_p_dist.view(T * N, -1)
         acc_q_dist = acc_q_dist.view(T * N, -1)
-        acc_policy = acc_policy.view(T * N, -1)
 
-        hxs = torch.cat([h, policy], dim=1)
-
-        return acc_p_dist, acc_q_dist, acc_policy, hxs
+        return acc_p_dist, acc_q_dist
 
 
 class CNNBase(NNBase):
@@ -266,9 +301,11 @@ class CNNBase(NNBase):
     def forward(self, inputs, rnn_hxs, masks, prev_action_one_hot, is_training=False):
         ob_original = self.img_encoder(inputs / 255.0)
         
-        p_dist, q_dist, policy, rnn_hxs = self._forward_gru(ob_original, rnn_hxs, masks, prev_action_one_hot)
+        policy, rnn_hxs = self._forward_gru_policy(ob_original, rnn_hxs, masks, prev_action_one_hot)
 
         if is_training:
+            p_dist, q_dist = self._forward_gru_dist(ob_original, rnn_hxs, masks, prev_action_one_hot)
+            
             q_mu = q_dist[:, : self.hidden_size]
             q_logvar = q_dist[:, self.hidden_size :]
             p_mu = p_dist[:, : self.hidden_size]
