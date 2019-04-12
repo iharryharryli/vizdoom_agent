@@ -85,7 +85,7 @@ class NNBase(nn.Module):
     def __init__(self, recurrent, hidden_size):
         super(NNBase, self).__init__()
 
-        self._hidden_size = hidden_size * 2
+        self._hidden_size = hidden_size
         self._recurrent = recurrent
 
         
@@ -94,13 +94,6 @@ class NNBase(nn.Module):
         nn.init.orthogonal_(self.h_gru.weight_hh.data)
         self.h_gru.bias_ih.data.fill_(0)
         self.h_gru.bias_hh.data.fill_(0)
-
-        self.policy_gru = nn.GRUCell(hidden_size, hidden_size)
-        nn.init.orthogonal_(self.policy_gru.weight_ih.data)
-        nn.init.orthogonal_(self.policy_gru.weight_hh.data)
-        self.policy_gru.bias_ih.data.fill_(0)
-        self.policy_gru.bias_hh.data.fill_(0)
-
 
     @property
     def is_recurrent(self):
@@ -124,8 +117,7 @@ class NNBase(nn.Module):
         masks = masks.view(T, N, 1)
         prev_action_one_hot = prev_action_one_hot.view(T, N, self.num_actions)
 
-        h = hxs[:, : self.hidden_size]
-        policy = hxs[:, self.hidden_size : ]
+        h = hxs
 
         acc_p_dist = []
         acc_q_dist = []
@@ -149,7 +141,7 @@ class NNBase(nn.Module):
             h = self.h_gru(self.extractor(z), h * masks[i])
 
             # Policy
-            policy = self.policy_gru(self.policy_net(z), policy * masks[i])
+            policy = self.policy_net(z)
 
             # Save Output
             acc_p_dist.append(p_dist)
@@ -166,7 +158,7 @@ class NNBase(nn.Module):
         acc_q_dist = acc_q_dist.view(T * N, -1)
         acc_policy = acc_policy.view(T * N, -1)
 
-        hxs = torch.cat([h, policy], dim=1)
+        hxs = h
 
         return acc_p_dist, acc_q_dist, acc_policy, hxs
 
