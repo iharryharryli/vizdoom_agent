@@ -146,10 +146,10 @@ class NNBase(nn.Module):
             z = q_mu
 
             # Update GRU
-            h = self.h_gru(self.extractor(z), h * masks[i])
+            h = self.h_gru(z, h * masks[i])
 
             # Policy
-            policy = self.policy_gru(self.policy_net(z), policy * masks[i])
+            policy = self.policy_gru(z, policy * masks[i])
 
             # Save Output
             acc_p_dist.append(p_dist)
@@ -239,20 +239,6 @@ class CNNBase(NNBase):
             init4_(nn.Linear(dist_size, img_rep_size)),
             nn.Tanh(),
         )  
-
-        self.extractor = nn.Sequential(
-            init_(nn.Linear(hidden_size, hidden_size)),
-            nn.ReLU(),
-            init_(nn.Linear(hidden_size, hidden_size)),
-            nn.ReLU(),
-        )
-
-        self.policy_net = nn.Sequential(
-            init_(nn.Linear(hidden_size, hidden_size)),
-            nn.ReLU(),
-            init_(nn.Linear(hidden_size, hidden_size)),
-            nn.ReLU(),
-        )
 
         self.train()
 
