@@ -47,7 +47,7 @@ def get_args():
                         help='use a recurrent policy')
     parser.add_argument('--use-rmsprop', action='store_true', default=True,
                         help='use RMSprop optimizer for A2C')
-    parser.add_argument('--reward-scale', type=float, default=0.01)
+    parser.add_argument('--reward-scale', type=float, default=1.0)
     parser.add_argument('--frame-skip', type=int, default=4,
                         help='number of frames to skip for each step')
     parser.add_argument('--game-config', default="ViZDoom_map/my_health.cfg")
@@ -62,6 +62,8 @@ def get_args():
 
 
     parser.add_argument('--drop-input-prob', type=float, default=0.0)
+    parser.add_argument('--drop-input-freq', type=int, default=3)
+    parser.add_argument('--flicker-freq', type=int, default=1)
 
     parser.add_argument('--rotate-sensor', action='store_true', default=False)
     parser.add_argument('--rotate-range', type=float, default=30.0)

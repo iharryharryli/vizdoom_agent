@@ -39,8 +39,10 @@ env_arg = {
     "jitter_rgb": args.jitter_rgb,
     "noise_var": args.noise_var,
     "drop_input_prob": args.drop_input_prob,
+    "drop_input_freq": args.drop_input_freq,
     "rotate_sensor": args.rotate_sensor,
     "rotate_range": args.rotate_range,
+    "flicker_freq": args.flicker_freq,
 }
 
 result_dir = args.result_dir
