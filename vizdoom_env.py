@@ -106,7 +106,7 @@ class ViZDoomENV:
     def step_with_skip(self, action):
         ob = self.last_input
 
-        reward = self.game.make_action(self.actions[action], self.frame_skip)
+        reward = self.game.make_action(self.actions[action], self.frame_skip + 1)
         done = self.game.is_episode_finished()
 
         if not done:
