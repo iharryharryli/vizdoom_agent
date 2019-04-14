@@ -132,24 +132,19 @@ class NNBase(nn.Module):
         acc_policy = []
 
         for i in range(T):
-            h_and_action = torch.cat([h, prev_action_one_hot[i]], dim=1) * masks[i]
-
             # P
-            p_dist = self.p_network(h_and_action)
-            p_mu = p_dist[:, : self.hidden_size]
-
-            # Q
-            q_input = torch.cat([c[i], h_and_action], dim=1)
-            q_dist = self.q_network(q_input)
-            q_mu = q_dist[:, : self.hidden_size]
-
-            z = q_mu
+            p_dist = self.p_network(torch.cat([h, prev_action_one_hot[i]], dim=1) * masks[i])
 
             # Update GRU
-            h = self.h_gru(self.extractor(z), h * masks[i])
+            h = self.h_gru(self.extractor(torch.cat([c[i], prev_action_one_hot[i] * masks[i]], dim=1)), 
+                h * masks[i])
 
+            # Q
+            q_dist = self.q_network(h)
+            q_mu = q_dist[:, : self.hidden_size]
+           
             # Policy
-            policy = self.policy_gru(self.policy_net(z), policy * masks[i])
+            policy = self.policy_gru(self.policy_net(q_mu), policy * masks[i])
 
             # Save Output
             acc_p_dist.append(p_dist)
@@ -224,7 +219,7 @@ class CNNBase(NNBase):
         )
 
         self.q_network = nn.Sequential(
-            init_(nn.Linear(img_rep_size + hidden_size + num_actions, dist_size)),
+            init_(nn.Linear(hidden_size, dist_size)),
             nn.ReLU(),
             init_(nn.Linear(dist_size, dist_size)),
             nn.ReLU(),
@@ -241,7 +236,7 @@ class CNNBase(NNBase):
         )  
 
         self.extractor = nn.Sequential(
-            init_(nn.Linear(hidden_size, hidden_size)),
+            init_(nn.Linear(img_rep_size + num_actions, hidden_size)),
             nn.ReLU(),
             init_(nn.Linear(hidden_size, hidden_size)),
             nn.ReLU(),
