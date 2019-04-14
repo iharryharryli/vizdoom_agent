@@ -115,7 +115,26 @@ class NNBase(nn.Module):
         #return self._hidden_size
         return self.hidden_size
 
-    def _forward_gru(self, c, hxs, masks, prev_action_one_hot):    
+    def _forward_one_step(self, s_next, hxs, mask, prev_action_one_hot):
+        h = hxs[:, : self.hidden_size]
+        s = hxs[:, self.hidden_size : 2 * self.hidden_size]
+        policy = hxs[:, 2 * self.hidden_size : ]
+
+        # P
+        p_input = torch.cat([h, s, prev_action_one_hot], dim=1) * mask
+        p_dist = self.p_network(p_input)
+
+        # Update GRU
+        h = self.h_gru(s_next, h * mask)
+
+        # Update Policy 
+        policy = self.policy_gru(s_next, policy * mask)
+
+        hxs = torch.cat([h, s_next, policy], dim=1)
+
+        return p_dist, policy, hxs
+
+    def _forward_multi_steps(self, c, hxs, masks, prev_action_one_hot):    
         # x is a (T, N, -1) tensor that has been flatten to (T * N, -1)
         N = hxs.size(0)
         T = int(c.size(0) / N)
@@ -124,27 +143,11 @@ class NNBase(nn.Module):
         masks = masks.view(T, N, 1)
         prev_action_one_hot = prev_action_one_hot.view(T, N, self.num_actions)
 
-        h = hxs[:, : self.hidden_size]
-        q_mu = hxs[:, self.hidden_size : 2 * self.hidden_size]
-        policy = hxs[:, 2 * self.hidden_size : ]
-
         acc_p_dist = []
         acc_policy = []
 
         for i in range(T):
-            # P
-            p_input = torch.cat([h, q_mu, prev_action_one_hot[i]], dim=1)
-            p_dist = self.p_network(p_input * masks[i])
-            p_mu = p_dist[:, : self.hidden_size]
-
-            # Q
-            q_mu = c[i]
-
-            # Update GRU
-            h = self.h_gru(p_mu, h * masks[i])
-
-            # Policy
-            policy = self.policy_gru(q_mu, policy * masks[i])
+            p_dist, policy, hxs = self._forward_one_step(c[i], hxs, masks[i], prev_action_one_hot[i])
 
             # Save Output
             acc_p_dist.append(p_dist)
@@ -157,8 +160,6 @@ class NNBase(nn.Module):
         # flatten
         acc_p_dist = acc_p_dist.view(T * N, -1)
         acc_policy = acc_policy.view(T * N, -1)
-
-        hxs = torch.cat([h,q_mu,policy], dim=1)
 
         return acc_p_dist, acc_policy, hxs
 
@@ -237,23 +238,26 @@ class CNNBase(NNBase):
         z = mu + std * esp
         return z
 
-    def forward(self, inputs, rnn_hxs, masks, prev_action_one_hot, is_training=False):
+    def forward(self, inputs, hxs, masks, prev_action_one_hot, is_training=False):
         ob_original = self.img_encoder(inputs / 255.0)
 
         q_dist = self.q_network(ob_original)
         q_mu = q_dist[:, : self.hidden_size]
-        q_logvar = q_dist[:, self.hidden_size :]
-        
-        p_dist, policy, rnn_hxs = self._forward_gru(q_mu, rnn_hxs, masks, prev_action_one_hot)
-
-        p_mu = p_dist[:, : self.hidden_size]
-        p_logvar = p_dist[:, self.hidden_size :]
 
         if is_training:
             # reconstruct
+            q_logvar = q_dist[:, self.hidden_size :]
             z = self.reparameterize(q_mu, q_logvar)            
             ob_reconstructed = self.decoder(z)
-            
-            return self.critic_linear(policy), policy, rnn_hxs, ob_original, ob_reconstructed, q_mu, q_logvar, p_mu, p_logvar
+
+            p_dist, policy, hxs = self._forward_multi_steps(q_mu, hxs, masks, prev_action_one_hot)
+
+            p_mu = p_dist[:, : self.hidden_size]
+            p_logvar = p_dist[:, self.hidden_size :]
+
+            return self.critic_linear(policy), policy, hxs, ob_original, ob_reconstructed, q_mu, q_logvar, p_mu, p_logvar
+
         else:
-            return self.critic_linear(policy), policy, rnn_hxs
+            _, policy, hxs = self._forward_one_step(q_mu, hxs, masks, prev_action_one_hot)
+
+            return self.critic_linear(policy), policy, hxs
