@@ -144,7 +144,7 @@ class NNBase(nn.Module):
             h = self.h_gru(p_mu, h * masks[i])
 
             # Policy
-            policy = self.policy_gru(q_mu, policy * masks[i])
+            policy = self.policy_gru(self.policy_net(torch.cat([q_mu, h], dim=1)), policy * masks[i])
 
             # Save Output
             acc_p_dist.append(p_dist)
@@ -226,7 +226,14 @@ class CNNBase(NNBase):
             nn.ReLU(),
             init4_(nn.Linear(dist_size, 32 * 7 * 7)),
             nn.Tanh(),
-        )   
+        ) 
+
+        self.policy_net = nn.Sequential(
+            init_(nn.Linear(dist_size, hidden_size)),
+            nn.ReLU(),
+            init_(nn.Linear(hidden_size, hidden_size)),
+            nn.ReLU(),
+        )  
 
         self.train()
 
