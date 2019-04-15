@@ -85,7 +85,7 @@ class NNBase(nn.Module):
     def __init__(self, recurrent, hidden_size):
         super(NNBase, self).__init__()
 
-        self._hidden_size = hidden_size * 3
+        self._hidden_size = hidden_size * 4
         self._recurrent = recurrent
 
         
@@ -95,7 +95,7 @@ class NNBase(nn.Module):
         self.h_gru.bias_ih.data.fill_(0)
         self.h_gru.bias_hh.data.fill_(0)
 
-        self.policy_gru = nn.GRUCell(hidden_size, hidden_size)
+        self.policy_gru = nn.GRUCell(hidden_size * 2, hidden_size * 2)
         nn.init.orthogonal_(self.policy_gru.weight_ih.data)
         nn.init.orthogonal_(self.policy_gru.weight_hh.data)
         self.policy_gru.bias_ih.data.fill_(0)
@@ -144,11 +144,12 @@ class NNBase(nn.Module):
             h = self.h_gru(p_mu, h * masks[i])
 
             # Policy
-            policy = self.policy_gru(self.policy_net(torch.cat([q_mu, h], dim=1)), policy * masks[i])
+            policy = self.policy_gru(torch.cat([q_mu, h], dim=1), policy * masks[i])
+            complex_policy = self.policy_net(policy)
 
             # Save Output
             acc_p_dist.append(p_dist)
-            acc_policy.append(policy)
+            acc_policy.append(complex_policy)
 
         # assert len(outputs) == T
         # x is a (T, N, -1) tensor
