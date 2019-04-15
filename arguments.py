@@ -54,7 +54,7 @@ def get_args():
     parser.add_argument('--use-depth', action='store_true', default=False)
     parser.add_argument('--disable-rgb', action='store_true', default=False)
     parser.add_argument('--jitter-rgb', action='store_true', default=False)
-    parser.add_argument('--continue-training', action='store_true', default=False)
+    parser.add_argument('--continue-training', action='store_true', default=True)
 
     parser.add_argument('--mse-coef', type=float, default=1.0)
     parser.add_argument('--kl-coef', type=float, default=1.0)

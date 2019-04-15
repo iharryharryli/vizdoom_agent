@@ -146,7 +146,7 @@ episode_lengths = deque(maxlen=recent_count)
 if args.continue_training:
     progress = json.load(open(progress_save))
     num_updates_init = progress["last_saved_num_updates"] 
-    actor_critic.load_state_dict(torch.load(MODEL_SAVE_PATH, map_location=device))
+    actor_critic.load_state_dict(torch.load(MODEL_SAVE_PATH, map_location=device), strict=False)
 else:
     num_updates_init = 0
     progress = {
@@ -196,12 +196,12 @@ for j in range(num_updates_init, num_updates):
     
     total_num_steps = (j + 1) * parameters['num_processes'] * parameters['num_steps']
     
-    with open(loss_history, 'a') as the_file:
-        the_file.write(("{} " * (len(losses) + 1) + "\n").format(total_num_steps, *losses))
+    # with open(loss_history, 'a') as the_file:
+    #     the_file.write(("{} " * (len(losses) + 1) + "\n").format(total_num_steps, *losses))
     
     if len(episode_rewards) > 0:
-        print("{} updates: avg reward = {}, avg length = {}".format(total_num_steps, np.mean(episode_rewards),
-                                                               np.mean(episode_lengths)))
+        print("{} updates: avg reward = {}, avg length = {}, loss: {}".format(total_num_steps, np.mean(episode_rewards),
+                                                               np.mean(episode_lengths), losses))
         
         with open(reward_history, 'a') as the_file:
             the_file.write('{} {} {} \n'.format(total_num_steps, np.mean(episode_rewards),

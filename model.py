@@ -68,7 +68,8 @@ class Policy(nn.Module):
         return value
 
     def evaluate_actions(self, inputs, rnn_hxs, masks, prev_action_one_hot, action):
-        value, actor_features, rnn_hxs, ob_original, ob_reconstructed, q_mu, q_logvar, p_mu, p_logvar = self.base(inputs, 
+        value, actor_features, rnn_hxs, ob_original, ob_reconstructed, q_mu, q_logvar, p_mu, p_logvar, \
+            mixed_clean, mixed_black = self.base(inputs, 
             rnn_hxs, masks, prev_action_one_hot, is_training=True)
         
         dist = self.dist(actor_features)
@@ -77,7 +78,7 @@ class Policy(nn.Module):
         dist_entropy = dist.entropy().mean()
 
         return value, action_log_probs, dist_entropy, rnn_hxs, ob_original, ob_reconstructed, \
-        q_mu, q_logvar, p_mu, p_logvar
+        q_mu, q_logvar, p_mu, p_logvar, mixed_clean, mixed_black
 
 
 class NNBase(nn.Module):
@@ -233,6 +234,18 @@ class CNNBase(NNBase):
 
         self.q_network = init2_(nn.Linear(hidden_size, dist_size))
 
+        self.attention = nn.Sequential(
+            init_(nn.Conv2d(num_inputs, 32, 8, stride=4)),
+            nn.ReLU(),
+            init_(nn.Conv2d(32, 64, 4, stride=2)),
+            nn.ReLU(),
+            init_(nn.Conv2d(64, 32, 3, stride=1)),
+            nn.ReLU(),
+            Flatten(),
+            init3_(nn.Linear(32 * 7 * 7, 1)),
+            nn.Sigmoid(),
+        ) 
+
         self.train()
 
     def reparameterize(self, mu, logvar):
@@ -260,7 +273,16 @@ class CNNBase(NNBase):
             # reconstruct
             z = self.reparameterize(q_mu, q_logvar)
             ob_reconstructed = self.decoder(z)
+
+            ob_black = torch.zeros(*ob_original.size(), device=self.device)
             
-            return self.critic_linear(policy), policy, rnn_hxs, ob_original, ob_reconstructed, q_mu, q_logvar, p_mu, p_logvar
+            attention = self.attention(ob_original)
+            mixed = q_mu.detach() * attention + p_mu.detach() * (1 - attention)
+
+            attention_black = self.attention(ob_black)
+            mixed_black = q_mu.detach() * attention_black + p_mu.detach() * (1 - attention_black)
+            
+            return self.critic_linear(policy), policy, rnn_hxs, ob_original, ob_reconstructed, q_mu, q_logvar, p_mu, p_logvar, \
+                mixed, mixed_black
         else:
             return self.critic_linear(policy), policy, rnn_hxs

@@ -38,20 +38,30 @@ class A2C_ACKTR():
                 self.optimizer = optim.Adam(actor_critic.parameters(), lr=lr, eps=eps)
             else:
                 self.optimizer = optim.RMSprop(
-                actor_critic.parameters(), lr, eps=eps, alpha=alpha)
+                actor_critic.base.attention.parameters(), lr, eps=eps, alpha=alpha)
 
     def update(self, rollouts):
         obs_shape = rollouts.obs.size()[2:]
         action_shape = rollouts.actions.size()[-1]
         num_steps, num_processes, _ = rollouts.rewards.size()
 
-        values, action_log_probs, dist_entropy, _, ob_original, ob_reconstructed, q_mu, q_logvar, p_mu, p_logvar =\
-         self.actor_critic.evaluate_actions(
+        values, action_log_probs, dist_entropy, _, ob_original, ob_reconstructed, q_mu, q_logvar, p_mu, p_logvar, \
+            mixed_clean, mixed_black = self.actor_critic.evaluate_actions(
                 rollouts.obs[:-1].view(-1, *obs_shape),
                 rollouts.recurrent_hidden_states[0].view(-1, self.actor_critic.recurrent_hidden_state_size),
                 rollouts.masks[:-1].view(-1, 1),
                 rollouts.prev_action_one_hot[:-1].view(-1, action_shape),
                 rollouts.actions.view(-1, action_shape))
+
+        q_mu = q_mu.detach()
+
+        self.optimizer.zero_grad()
+        loss = ((mixed_clean - q_mu).pow(2)).mean() + ((mixed_black - q_mu).pow(2)).mean()
+        loss.backward()
+        self.optimizer.step()
+
+        return loss.item()
+
 
         values = values.view(num_steps, num_processes, 1)
         action_log_probs = action_log_probs.view(num_steps, num_processes, 1)
