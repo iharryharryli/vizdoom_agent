@@ -85,7 +85,7 @@ class NNBase(nn.Module):
     def __init__(self, recurrent, hidden_size):
         super(NNBase, self).__init__()
 
-        self._hidden_size = hidden_size * 3
+        self._hidden_size = hidden_size * 2
         self._recurrent = recurrent
 
         
@@ -94,13 +94,6 @@ class NNBase(nn.Module):
         nn.init.orthogonal_(self.h_gru.weight_hh.data)
         self.h_gru.bias_ih.data.fill_(0)
         self.h_gru.bias_hh.data.fill_(0)
-
-        self.policy_gru = nn.GRUCell(hidden_size, hidden_size)
-        nn.init.orthogonal_(self.policy_gru.weight_ih.data)
-        nn.init.orthogonal_(self.policy_gru.weight_hh.data)
-        self.policy_gru.bias_ih.data.fill_(0)
-        self.policy_gru.bias_hh.data.fill_(0)
-
 
     @property
     def is_recurrent(self):
@@ -125,8 +118,7 @@ class NNBase(nn.Module):
         prev_action_one_hot = prev_action_one_hot.view(T, N, self.num_actions)
 
         h = hxs[:, : self.hidden_size]
-        q_mu = hxs[:, self.hidden_size : 2 * self.hidden_size]
-        policy = hxs[:, 2 * self.hidden_size : ]
+        q_mu = hxs[:, self.hidden_size : ]
 
         acc_p_dist = []
         acc_policy = []
@@ -141,14 +133,11 @@ class NNBase(nn.Module):
             q_mu = c[i]
 
             # Update GRU
-            h = self.h_gru(p_mu, h * masks[i])
-
-            # Policy
-            policy = self.policy_gru(q_mu, policy * masks[i])
+            h = self.h_gru(q_mu, h * masks[i])
 
             # Save Output
             acc_p_dist.append(p_dist)
-            acc_policy.append(policy)
+            acc_policy.append(h)
 
         # assert len(outputs) == T
         # x is a (T, N, -1) tensor
@@ -158,7 +147,7 @@ class NNBase(nn.Module):
         acc_p_dist = acc_p_dist.view(T * N, -1)
         acc_policy = acc_policy.view(T * N, -1)
 
-        hxs = torch.cat([h,q_mu,policy], dim=1)
+        hxs = torch.cat([h,q_mu], dim=1)
 
         return acc_p_dist, acc_policy, hxs
 
