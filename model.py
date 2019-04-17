@@ -134,9 +134,12 @@ class NNBase(nn.Module):
             # P
             p_input = torch.cat([h, prev_action_one_hot[i]], dim=1)
             p_dist = self.p_network(p_input * masks[i])
+            p_mu = p_dist[:, : self.hidden_size]
 
             # Q
-            q_mu = c[i]
+            q_mu = p_mu
+            if self.global_counter % 8 == 0:
+                q_mu = c[i]
 
             # Update GRU
             h = self.h_gru(q_mu, h * masks[i])
@@ -147,6 +150,8 @@ class NNBase(nn.Module):
             # Save Output
             acc_p_dist.append(p_dist)
             acc_policy.append(policy)
+
+            self.global_counter += 1
 
         # assert len(outputs) == T
         # x is a (T, N, -1) tensor
@@ -168,6 +173,8 @@ class CNNBase(NNBase):
         self.hidden_size = hidden_size
         self.num_actions = num_actions
         self.device = device
+
+        self.global_counter = 0
 
         init_ = lambda m: init(m,
             nn.init.orthogonal_,
