@@ -85,7 +85,7 @@ class NNBase(nn.Module):
     def __init__(self, recurrent, hidden_size):
         super(NNBase, self).__init__()
 
-        self._hidden_size = hidden_size * 3
+        self._hidden_size = hidden_size * 2
         self._recurrent = recurrent
 
         
@@ -125,23 +125,21 @@ class NNBase(nn.Module):
         prev_action_one_hot = prev_action_one_hot.view(T, N, self.num_actions)
 
         h = hxs[:, : self.hidden_size]
-        q_mu = hxs[:, self.hidden_size : 2 * self.hidden_size]
-        policy = hxs[:, 2 * self.hidden_size : ]
+        policy = hxs[:, self.hidden_size : ]
 
         acc_p_dist = []
         acc_policy = []
 
         for i in range(T):
             # P
-            p_input = torch.cat([h, q_mu, prev_action_one_hot[i]], dim=1)
+            p_input = torch.cat([h, prev_action_one_hot[i]], dim=1)
             p_dist = self.p_network(p_input * masks[i])
-            p_mu = p_dist[:, : self.hidden_size]
 
             # Q
             q_mu = c[i]
 
             # Update GRU
-            h = self.h_gru(p_mu, h * masks[i])
+            h = self.h_gru(q_mu, h * masks[i])
 
             # Policy
             policy = self.policy_gru(q_mu, policy * masks[i])
@@ -158,7 +156,7 @@ class NNBase(nn.Module):
         acc_p_dist = acc_p_dist.view(T * N, -1)
         acc_policy = acc_policy.view(T * N, -1)
 
-        hxs = torch.cat([h,q_mu,policy], dim=1)
+        hxs = torch.cat([h, policy], dim=1)
 
         return acc_p_dist, acc_policy, hxs
 
@@ -206,7 +204,7 @@ class CNNBase(NNBase):
         dist_size = hidden_size * 2
 
         self.p_network = nn.Sequential(
-            init_(nn.Linear(hidden_size + hidden_size + num_actions, dist_size)),
+            init_(nn.Linear(hidden_size + num_actions, dist_size)),
             nn.ReLU(),
             init_(nn.Linear(dist_size, dist_size)),
             nn.ReLU(),
@@ -216,13 +214,15 @@ class CNNBase(NNBase):
         self.q_network = nn.Sequential(
             init_(nn.Linear(32 * 7 * 7, dist_size)),
             nn.ReLU(),
-            init_(nn.Linear(dist_size, hidden_size)),
+            init_(nn.Linear(dist_size, dist_size)),
             nn.ReLU(),
-            init2_(nn.Linear(hidden_size, dist_size))
+            init2_(nn.Linear(dist_size, dist_size))
         )    
 
         self.decoder = nn.Sequential(
             init_(nn.Linear(hidden_size, dist_size)),
+            nn.ReLU(),
+            init_(nn.Linear(dist_size, dist_size)),
             nn.ReLU(),
             init4_(nn.Linear(dist_size, 32 * 7 * 7)),
             nn.Tanh(),
@@ -246,13 +246,13 @@ class CNNBase(NNBase):
         
         p_dist, policy, rnn_hxs = self._forward_gru(q_mu, rnn_hxs, masks, prev_action_one_hot)
 
-        p_mu = p_dist[:, : self.hidden_size]
-        p_logvar = p_dist[:, self.hidden_size :]
-
         if is_training:
             # reconstruct
             z = self.reparameterize(q_mu, q_logvar)            
             ob_reconstructed = self.decoder(z)
+
+            p_mu = p_dist[:, : self.hidden_size]
+            p_logvar = p_dist[:, self.hidden_size :]
             
             return self.critic_linear(policy), policy, rnn_hxs, ob_original, ob_reconstructed, q_mu, q_logvar, p_mu, p_logvar
         else:
