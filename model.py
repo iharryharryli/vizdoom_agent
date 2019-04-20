@@ -68,7 +68,7 @@ class Policy(nn.Module):
         return value
 
     def evaluate_actions(self, inputs, rnn_hxs, masks, prev_action_one_hot, action):
-        value, actor_features, rnn_hxs, ob_original, ob_reconstructed, q_mu, q_logvar, p_mu, p_logvar = self.base(inputs, 
+        value, actor_features, rnn_hxs, ob_original, ob_reconstructed, q_mu, p_mu = self.base(inputs, 
             rnn_hxs, masks, prev_action_one_hot, is_training=True)
         
         dist = self.dist(actor_features)
@@ -77,7 +77,7 @@ class Policy(nn.Module):
         dist_entropy = dist.entropy().mean()
 
         return value, action_log_probs, dist_entropy, rnn_hxs, ob_original, ob_reconstructed, \
-        q_mu, q_logvar, p_mu, p_logvar
+        q_mu, p_mu
 
 
 class NNBase(nn.Module):
@@ -208,7 +208,7 @@ class CNNBase(NNBase):
             nn.ReLU(),
             init_(nn.Linear(dist_size, dist_size)),
             nn.ReLU(),
-            init2_(nn.Linear(dist_size, dist_size))
+            init2_(nn.Linear(dist_size, hidden_size))
         )
 
         self.q_network = nn.Sequential(
@@ -216,7 +216,7 @@ class CNNBase(NNBase):
             nn.ReLU(),
             init_(nn.Linear(dist_size, dist_size)),
             nn.ReLU(),
-            init2_(nn.Linear(dist_size, dist_size))
+            init2_(nn.Linear(dist_size, hidden_size))
         )    
 
         self.decoder = nn.Sequential(
@@ -230,30 +230,23 @@ class CNNBase(NNBase):
 
         self.train()
 
-    def reparameterize(self, mu, logvar):
-        std = logvar.mul(0.5).exp()
-        # return torch.normal(mu, std)
+    def reparameterize(self, mu):
         esp = torch.randn(*mu.size(), device=self.device)
-        z = mu + std * esp
+        z = mu + esp
         return z
 
     def forward(self, inputs, rnn_hxs, masks, prev_action_one_hot, is_training=False):
         ob_original = self.img_encoder(inputs / 255.0)
 
-        q_dist = self.q_network(ob_original)
-        q_mu = q_dist[:, : self.hidden_size]
-        q_logvar = q_dist[:, self.hidden_size :]
+        q_mu = self.q_network(ob_original)
         
-        p_dist, policy, rnn_hxs = self._forward_gru(q_mu, rnn_hxs, masks, prev_action_one_hot)
+        p_mu, policy, rnn_hxs = self._forward_gru(q_mu, rnn_hxs, masks, prev_action_one_hot)
 
         if is_training:
             # reconstruct
-            z = self.reparameterize(q_mu, q_logvar)            
+            z = self.reparameterize(q_mu)            
             ob_reconstructed = self.decoder(z)
-
-            p_mu = p_dist[:, : self.hidden_size]
-            p_logvar = p_dist[:, self.hidden_size :]
             
-            return self.critic_linear(policy), policy, rnn_hxs, ob_original, ob_reconstructed, q_mu, q_logvar, p_mu, p_logvar
+            return self.critic_linear(policy), policy, rnn_hxs, ob_original, ob_reconstructed, q_mu, p_mu
         else:
             return self.critic_linear(policy), policy, rnn_hxs
