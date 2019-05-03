@@ -82,11 +82,7 @@ class NNBase(nn.Module):
         self._recurrent = recurrent
 
         if recurrent:
-            self.gru = nn.GRUCell(recurrent_input_size, hidden_size)
-            nn.init.orthogonal_(self.gru.weight_ih.data)
-            nn.init.orthogonal_(self.gru.weight_hh.data)
-            self.gru.bias_ih.data.fill_(0)
-            self.gru.bias_hh.data.fill_(0)
+            self.lstm = nn.LSTMCell(recurrent_input_size, hidden_size)
 
     @property
     def is_recurrent(self):
@@ -95,16 +91,19 @@ class NNBase(nn.Module):
     @property
     def recurrent_hidden_state_size(self):
         if self._recurrent:
-            return self._hidden_size
+            return self._hidden_size * 2
         return 1
 
     @property
     def output_size(self):
         return self._hidden_size
 
-    def _forward_gru(self, x, hxs, masks):
+    def _forward_lstm(self, x, hxs, masks):
+        hx, cx = torch.split(hxs, self._hidden_size, dim=1)
+
         if x.size(0) == hxs.size(0):
-            x = hxs = self.gru(x, hxs * masks)
+            hx, cx = self.lstm(x, (hx * masks, cx * masks))
+            x = hx
         else:
             # x is a (T, N, -1) tensor that has been flatten to (T * N, -1)
             N = hxs.size(0)
@@ -118,7 +117,7 @@ class NNBase(nn.Module):
 
             outputs = []
             for i in range(T):
-                hx = hxs = self.gru(x[i], hxs * masks[i])
+                hx, cx = self.lstm(x[i], (hx * masks[i], cx * masks[i]))
                 outputs.append(hx)
 
             # assert len(outputs) == T
@@ -127,6 +126,7 @@ class NNBase(nn.Module):
             # flatten
             x = x.view(T * N, -1)
 
+        hxs = torch.cat([hx, cx], dim=1)
         return x, hxs
 
 
@@ -163,47 +163,6 @@ class CNNBase(NNBase):
         x = self.main(inputs / 255.0)
 
         if self.is_recurrent:
-            x, rnn_hxs = self._forward_gru(x, rnn_hxs, masks)
+            x, rnn_hxs = self._forward_lstm(x, rnn_hxs, masks)
 
         return self.critic_linear(x), x, rnn_hxs
-
-
-class MLPBase(NNBase):
-    def __init__(self, num_inputs, recurrent=False, hidden_size=64):
-        super(MLPBase, self).__init__(recurrent, num_inputs, hidden_size)
-
-        if recurrent:
-            num_inputs = hidden_size
-
-        init_ = lambda m: init(m,
-            init_normc_,
-            lambda x: nn.init.constant_(x, 0))
-
-        self.actor = nn.Sequential(
-            init_(nn.Linear(num_inputs, hidden_size)),
-            nn.Tanh(),
-            init_(nn.Linear(hidden_size, hidden_size)),
-            nn.Tanh()
-        )
-
-        self.critic = nn.Sequential(
-            init_(nn.Linear(num_inputs, hidden_size)),
-            nn.Tanh(),
-            init_(nn.Linear(hidden_size, hidden_size)),
-            nn.Tanh()
-        )
-
-        self.critic_linear = init_(nn.Linear(hidden_size, 1))
-
-        self.train()
-
-    def forward(self, inputs, rnn_hxs, masks):
-        x = inputs
-
-        if self.is_recurrent:
-            x, rnn_hxs = self._forward_gru(x, rnn_hxs, masks)
-
-        hidden_critic = self.critic(x)
-        hidden_actor = self.actor(x)
-
-        return self.critic_linear(hidden_critic), hidden_actor, rnn_hxs
