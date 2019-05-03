@@ -237,6 +237,14 @@ class CNNBase(NNBase):
         z = mu + std * esp
         return z
 
+    def compute_q_mu(self, inputs):
+        ob_original = self.img_encoder(inputs / 255.0)
+
+        q_dist = self.q_network(ob_original)
+        q_mu = q_dist[:, : self.hidden_size]
+
+        return q_mu
+
     def forward(self, inputs, rnn_hxs, masks, prev_action_one_hot, is_training=False):
         ob_original = self.img_encoder(inputs / 255.0)
 
@@ -245,6 +253,8 @@ class CNNBase(NNBase):
         q_logvar = q_dist[:, self.hidden_size :]
         
         p_dist, policy, rnn_hxs = self._forward_gru(q_mu, rnn_hxs, masks, prev_action_one_hot)
+
+        self.last_p_mu = p_dist[:, : self.hidden_size]
 
         if is_training:
             # reconstruct

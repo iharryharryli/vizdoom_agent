@@ -30,7 +30,8 @@ parser.add_argument('result_dir', type=str)
 parser.add_argument('--seed', type=int, default=1)
 parser.add_argument('--fps', type=int, default=20)
 parser.add_argument('--eval', action='store_true')
-
+parser.add_argument('--collect', type=int, default=0)
+parser.add_argument('--collect_fname', type=str, default="collected")
 
 # In[3]:
 
@@ -51,8 +52,7 @@ model_params = json.load(open(model_params))
 
 env_params = os.path.join(result_dir, save_file_names.env_parameter_save_file)
 env_params = json.load(open(env_params))
-if not args.eval:
-    env_params['render'] = True
+env_params['render'] = not (args.eval or args.collect > 0)
 
 MODEL_SAVE_PATH = os.path.join(result_dir, save_file_names.MODEL_SAVE_PATH_file)
 
@@ -102,7 +102,9 @@ episode_rewards = deque(maxlen=recent_count)
 episode_lengths = deque(maxlen=recent_count)
 
 # In[ ]:
-
+episode_count = 0
+collect_ob_acc = []
+collect_p_mu_acc = []
 
 while True:
     obs = env.reset()
@@ -122,8 +124,12 @@ while True:
 
         masks.fill_(0.0 if done else 1.0)
 
-        if not args.eval:
+        if env_params['render'] :
             sleep(1.0/(args.fps))
+
+        if args.collect > 0:
+            collect_ob_acc.append(obs.astype(np.float32))
+            collect_p_mu_acc.append(actor_critic.base.last_p_mu.squeeze().numpy())
 
     episode_rewards.append(info['Episode_Total_Reward'])
     episode_lengths.append(info['Episode_Total_Len'])
@@ -132,41 +138,10 @@ while True:
         print("avg reward = {}, avg length = {}".format(np.mean(episode_rewards),
                                                                np.mean(episode_lengths)))
     else:
-        print(info)
+        print("{}: {}".format(episode_count, info))
 
+    episode_count += 1
 
-# In[ ]:
-
-
-obs[2]
-
-
-# In[ ]:
-
-
-value
-
-
-# In[ ]:
-
-
-value, actor_features, rnn_hxs = actor_critic.base(obs, None, masks)
-
-
-# In[ ]:
-
-
-dist = actor_critic.dist(actor_features)
-
-
-# In[ ]:
-
-
-dist.sample()
-
-
-# In[ ]:
-
-
-
-
+    if args.collect > 0 and episode_count == args.collect:
+        np.savez_compressed(args.collect_fname, ob=np.array(collect_ob_acc), p_mu=np.array(collect_p_mu_acc))
+        break
