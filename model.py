@@ -85,22 +85,11 @@ class NNBase(nn.Module):
     def __init__(self, recurrent, hidden_size):
         super(NNBase, self).__init__()
 
-        self._hidden_size = hidden_size * 2
+        self._hidden_size = hidden_size * 4
         self._recurrent = recurrent
-
         
-        self.h_gru = nn.GRUCell(hidden_size, hidden_size)
-        nn.init.orthogonal_(self.h_gru.weight_ih.data)
-        nn.init.orthogonal_(self.h_gru.weight_hh.data)
-        self.h_gru.bias_ih.data.fill_(0)
-        self.h_gru.bias_hh.data.fill_(0)
-
-        self.policy_gru = nn.GRUCell(hidden_size, hidden_size)
-        nn.init.orthogonal_(self.policy_gru.weight_ih.data)
-        nn.init.orthogonal_(self.policy_gru.weight_hh.data)
-        self.policy_gru.bias_ih.data.fill_(0)
-        self.policy_gru.bias_hh.data.fill_(0)
-
+        self.h_lstm = nn.LSTMCell(hidden_size, hidden_size)        
+        self.policy_lstm = nn.LSTMCell(hidden_size, hidden_size)
 
     @property
     def is_recurrent(self):
@@ -124,8 +113,7 @@ class NNBase(nn.Module):
         masks = masks.view(T, N, 1)
         prev_action_one_hot = prev_action_one_hot.view(T, N, self.num_actions)
 
-        h = hxs[:, : self.hidden_size]
-        policy = hxs[:, self.hidden_size : ]
+        h, h_mem, policy, policy_mem = torch.split(hxs, self.hidden_size, dim=1)
 
         acc_p_dist = []
         acc_policy = []
@@ -139,10 +127,10 @@ class NNBase(nn.Module):
             q_mu = c[i]
 
             # Update GRU
-            h = self.h_gru(q_mu, h * masks[i])
+            h, h_mem = self.h_lstm(q_mu, (h * masks[i], h_mem * masks[i]))
 
             # Policy
-            policy = self.policy_gru(q_mu, policy * masks[i])
+            policy, policy_mem = self.policy_lstm(q_mu, (policy * masks[i], policy_mem * masks[i]))
 
             # Save Output
             acc_p_dist.append(p_dist)
@@ -156,7 +144,7 @@ class NNBase(nn.Module):
         acc_p_dist = acc_p_dist.view(T * N, -1)
         acc_policy = acc_policy.view(T * N, -1)
 
-        hxs = torch.cat([h, policy], dim=1)
+        hxs = torch.cat([h, h_mem, policy, policy_mem], dim=1)
 
         return acc_p_dist, acc_policy, hxs
 
